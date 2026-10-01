@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cola de Prototipado — Laboratorio de Mecatrónica</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  background: linear-gradient(180deg, #f4f8fc 0%, #f7f9fb 100%);
+  margin: 0;
+  color: #1f2937;
+  min-height: 100vh;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  background: linear-gradient(135deg, #004B87, #0067B1);
+  color: white;
+  padding: 18px 20px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.12);
+}
+header img { height: 50px; }
+header h1 {
+  font-size: 1.45rem;
+  margin: 0;
+  font-weight: 700;
+  text-align: center;
+}
+.subtitulo {
+  width: 90%;
+  max-width: 1000px;
+  margin: 20px auto 0;
+  color: #64748b;
+  text-align: center;
+  font-size: .92rem;
+}
+.table-container {
+  width: 90%;
+  max-width: 1000px;
+  margin: 1.2rem auto 2rem;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.07);
+  border: 1px solid #e5e7eb;
+}
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+th, td {
+  padding: 13px 16px;
+  text-align: center;
+  border-bottom: 1px solid #edf0f3;
+}
+th {
+  background-color: #004B87;
+  color: white;
+  font-size: .86rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+tr:last-child td { border-bottom: none; }
+tbody tr {
+  transition: background .15s ease;
+}
+tbody tr:hover {
+  background: #f8fbff;
+}
+.ticket {
+  font-weight: 800;
+  color: #004B87;
+  font-size: .95rem;
+}
+.servicio {
+  font-weight: 600;
+  color: #374151;
+  font-size: .9rem;
+}
+.estado-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 125px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.estado-pill::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.estado-revision {
+  color: #b45309;
+  background: #fff7d6;
+  border-color: #fde68a;
+}
+.estado-aprobada {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #bbf7d0;
+}
+.estado-impresion {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+.estado-proceso {
+  color: #7c3aed;
+  background: #ede9fe;
+  border-color: #ddd6fe;
+}
+.estado-lista {
+  color: #15803d;
+  background: #dcfce7;
+  border-color: #86efac;
+  box-shadow: 0 0 0 3px rgba(34,197,94,.12);
+  animation: listoPulse 2.2s ease-in-out infinite;
+}
+.estado-lista::before {
+  background: #16a34a;
+}
+.estado-rechazada {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+.estado-cancelada {
+  color: #4b5563;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+@keyframes listoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+.actualizacion {
+  color: #64748b;
+  font-size: .83rem;
+  font-weight: 600;
+}
+.sin-datos, .error {
+  padding: 40px !important;
+  color: #64748b;
+  font-size: .95rem;
+}
+footer {
+  text-align: center;
+  font-size: .82rem;
+  color: #64748b;
+  margin: 2rem 0;
+  line-height: 1.5;
+}
+@media (max-width: 700px) {
+  header {
+    flex-direction: column;
+    padding: 14px;
+    gap: 8px;
+  }
+  header img { height: 38px; }
+  header h1 { font-size: 1.15rem; }
+  .table-container { width: 95%; }
+  th, td { padding: 9px 6px; font-size: .8rem; }
+  .estado-pill { min-width: auto; padding: 5px 8px; font-size: .75rem; }
+  .ticket { font-size: .82rem; }
+}
+</style>
+</head>
+<body>
+<header>
+  <img src="https://javier.rodriguez.org.mx/itesm/2014/tecnologico-de-monterrey-white.webp" alt="Tec de Monterrey">
+  <h1>Cola de Prototipado — Laboratorio de Mecatrónica</h1>
+</header>
+
+<div class="subtitulo">
+  Consulta el estado y avance de tu solicitud en tiempo real.
+</div>
+
+<div class="table-container">
+  <table id="cola">
+    <thead>
+      <tr>
+        <th>Ticket</th>
+        <th>Servicio</th>
+        <th>Estado</th>
+        <th>Fecha de solicitud</th>
+      </tr>
+    </thead>
+    <tbody id="body">
+      <tr>
+        <td colspan="4" class="sin-datos">⏳ Cargando solicitudes...</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  Actualizado automáticamente cada 30 s — Tecnológico de Monterrey © 2026<br>
+  Laboratorio de Mecatrónica A7-237
+</footer>
+
+<script>
+function cargarDatos() {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      const tbody = document.getElementById("body");
+      tbody.innerHTML = "";
+      if (!data || !data.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="sin-datos">
+              📭 No hay solicitudes activas o recientes en este momento.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+      data.forEach(function(row) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="ticket">${escapar(row.ticket)}</td>
+          <td class="servicio">${escapar(row.servicio)}</td>
+          <td>${estadoVisual(row.estado)}</td>
+          <td class="actualizacion">${escapar(row.fecha)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    })
+    .withFailureHandler(function(error) {
+      console.error("Error al cargar datos:", error);
+      document.getElementById("body").innerHTML = `
+        <tr>
+          <td colspan="4" class="error">
+            ❌ No se pudieron sincronizar las solicitudes. Reintentando en breve...
+          </td>
+        </tr>
+      `;
+    })
+    .obtenerDatosPublicos();
+}
+
+function estadoVisual(estado) {
+  const original = String(estado || "").trim();
+  const normalizado = original
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  let clase = "estado-revision";
+  let texto = original || "En revisión";
+  let icono = "⏳";
+
+  if (normalizado === "lista") {
+    clase = "estado-lista";
+    texto = "Listo para recoger";
+    icono = "✓";
+  } else if (normalizado === "aprobada") {
+    clase = "estado-aprobada";
+    texto = "Aprobada";
+    icono = "✓";
+  } else if (normalizado === "en impresion") {
+    clase = "estado-impresion";
+    texto = "En impresión";
+    icono = "🖨️";
+  } else if (normalizado.includes("corte") || normalizado.includes("proceso")) {
+    clase = "estado-proceso";
+    texto = "En proceso";
+    icono = "⚙️";
+  } else if (normalizado === "rechazada") {
+    clase = "estado-rechazada";
+    texto = "Rechazada";
+    icono = "✕";
+  } else if (normalizado === "cancelada") {
+    clase = "estado-cancelada";
+    texto = "Cancelada";
+    icono = "—";
+  } else if (normalizado === "en revision") {
+    clase = "estado-revision";
+    texto = "En revisión";
+    icono = "⏳";
+  }
+
+  return `
+    <span class="estado-pill ${clase}">
+      <span>${icono}</span>
+      ${escapar(texto)}
+    </span>
+  `;
+}
+
+function escapar(valor) {
+  return String(valor ?? "")
+    .split("&").join("&amp;")
+    .split("<").join("&lt;")
+    .split(">").join("&gt;")
+    .split('"').join("&quot;")
+    .split("'").join("&#039;");
+}
+
+cargarDatos();
+setInterval(cargarDatos, 30000); // Refresco cada 30 segundos
+</script>
+</body>
+</html>

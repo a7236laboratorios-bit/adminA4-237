@@ -1,0 +1,26 @@
+{
+  "name": "sistema-laboratorio-prototipado",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de prototipado rápido (Impresión 3D, Láser, PCB) para el Laboratorio de Mecatrónica del Tec de Monterrey",
+  "scripts": {
+    "login": "clasp login",
+    "pull": "clasp pull",
+    "push": "clasp push",
+    "watch": "clasp push --watch",
+    "open": "clasp open"
+  },
+  "keywords": [
+    "apps-script",
+    "google-sheets",
+    "google-forms",
+    "3d-printing",
+    "laser-cutting",
+    "pcb",
+    "tec-de-monterrey"
+  ],
+  "author": "Laboratorio de Mecatrónica - Tecnológico de Monterrey",
+  "license": "MIT",
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}

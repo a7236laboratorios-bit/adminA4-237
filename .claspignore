@@ -1,0 +1,6 @@
+**/**
+!src/**
+!src/appsscript.json
+!src/Code.js
+!src/admin.html
+!src/index.html
