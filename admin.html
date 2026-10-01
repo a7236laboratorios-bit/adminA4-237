@@ -543,6 +543,9 @@ textarea {
 
     <button id="loginButton" class="login-button" onclick="entrarAdmin()">🔓 Iniciar sesión</button>
     <div id="loginError" class="login-error"></div>
+    <div style="margin-top:16px;font-size:0.78rem;color:#64748b;">
+      <a href="javascript:void(0)" onclick="cambiarApiUrl()" style="color:#004b87;text-decoration:none;font-weight:600;">⚙️ Configurar URL de Google Apps Script</a>
+    </div>
   </div>
 </div>
 
@@ -556,6 +559,7 @@ textarea {
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
+    <a href="index.html" style="color:white;text-decoration:none;background:rgba(255,255,255,.18);padding:7px 14px;border-radius:20px;font-size:.85rem;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.3);">📋 Cola Pública</a>
     <span id="userBadge" style="display:none;font-size:.85rem;background:rgba(255,255,255,.18);padding:6px 14px;border-radius:20px;font-weight:600;">👤 <span id="userName">Admin</span></span>
     <button class="logout" onclick="cerrarSesion()">🚪 Cerrar sesión</button>
   </div>
@@ -611,6 +615,77 @@ textarea {
 <div id="toast"></div>
 
 <script>
+// ==========================================
+// CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS
+// ==========================================
+// Puedes colocar aquí directamente la URL que te da Apps Script al implementar como Web App:
+const DEFAULT_API_URL = "";
+
+function obtenerApiUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("api")) {
+    const a = params.get("api").trim();
+    localStorage.setItem("LAB_API_URL", a);
+    return a;
+  }
+  const guardada = localStorage.getItem("LAB_API_URL");
+  if (guardada && guardada.trim()) return guardada.trim();
+  return DEFAULT_API_URL.trim();
+}
+
+function cambiarApiUrl() {
+  const actual = localStorage.getItem("LAB_API_URL") || DEFAULT_API_URL || "";
+  const nueva = prompt("Pega la URL de tu Web App de Google Apps Script (terminada en /exec):", actual);
+  if (nueva !== null && nueva.trim() !== "") {
+    localStorage.setItem("LAB_API_URL", nueva.trim());
+    mostrarToast("URL de Apps Script actualizada.", false);
+    if (adminToken) cargarTodo();
+  }
+}
+
+async function apiCall(action, params = {}, method = "POST") {
+  const apiUrl = obtenerApiUrl();
+  if (!apiUrl) {
+    cambiarApiUrl();
+    throw new Error("Por favor configura la URL de la Web App de Apps Script.");
+  }
+
+  try {
+    if (method === "GET") {
+      const url = new URL(apiUrl);
+      url.searchParams.set("action", action);
+      url.searchParams.set("_t", Date.now());
+      Object.keys(params).forEach(k => {
+        if (params[k] !== undefined && params[k] !== null) {
+          url.searchParams.set(k, typeof params[k] === "object" ? JSON.stringify(params[k]) : params[k]);
+        }
+      });
+      const resp = await fetch(url.toString(), { method: "GET" });
+      if (!resp.ok) throw new Error("Error en servidor (HTTP " + resp.status + ")");
+      const json = await resp.json();
+      if (!json.ok) throw new Error(json.error || "Error en la petición.");
+      return json;
+    } else {
+      // POST: se envía text/plain para evitar OPTIONS preflight CORS en Apps Script
+      const payload = Object.assign({ action: action }, params);
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) throw new Error("Error en servidor (HTTP " + resp.status + ")");
+      const json = await resp.json();
+      if (!json.ok) throw new Error(json.error || "Error en la petición.");
+      return json;
+    }
+  } catch (err) {
+    console.error("apiCall error:", action, err);
+    throw err;
+  }
+}
+
 let solicitudes = [];
 let resultadosHistorial = [];
 let mostrandoHistorial = false;
@@ -621,28 +696,25 @@ window.onload = function() {
   mostrarLogin();
 };
 
-function cargarTodo() {
+async function cargarTodo() {
   if (!adminToken) {
     mostrarLogin();
     return;
   }
   mostrarLoading();
-  google.script.run
-    .withSuccessHandler(function(config) {
-      ocultarLogin();
-      configuracion = config;
-      llenarFiltros();
-      google.script.run
-        .withSuccessHandler(function(data) {
-          solicitudes = data || [];
-          actualizarEstadisticas();
-          renderizar();
-        })
-        .withFailureHandler(errorHandler)
-        .obtenerSolicitudesActivas(adminToken);
-    })
-    .withFailureHandler(errorHandler)
-    .obtenerConfiguracionAdmin(adminToken);
+  try {
+    const resConfig = await apiCall("obtenerConfiguracionAdmin", { token: adminToken }, "GET");
+    ocultarLogin();
+    configuracion = resConfig.config || { estados: [], impresoras: [] };
+    llenarFiltros();
+
+    const resData = await apiCall("obtenerSolicitudesActivas", { token: adminToken }, "GET");
+    solicitudes = resData.data || [];
+    actualizarEstadisticas();
+    renderizar();
+  } catch (err) {
+    errorHandler(err);
+  }
 }
 
 function mostrarLogin() {
@@ -674,7 +746,7 @@ function ocultarLogin(nombreUsuario) {
   }
 }
 
-function entrarAdmin() {
+async function entrarAdmin() {
   const userInput = document.getElementById("adminUser");
   const passInput = document.getElementById("adminPassword");
   const boton = document.getElementById("loginButton");
@@ -695,35 +767,36 @@ function entrarAdmin() {
     return;
   }
 
+  const apiUrl = obtenerApiUrl();
+  if (!apiUrl) {
+    cambiarApiUrl();
+    return;
+  }
+
   boton.disabled = true;
   boton.textContent = "⏳ Verificando credenciales...";
   error.textContent = "";
 
-  google.script.run
-    .withSuccessHandler(function(resultado) {
-      if (!resultado || !resultado.ok || !resultado.token) {
-        boton.disabled = false;
-        boton.textContent = "🔓 Iniciar sesión";
-        error.textContent = "No se pudo iniciar sesión.";
-        return;
-      }
-      adminToken = resultado.token;
-      if (passInput) passInput.value = "";
-      boton.disabled = false;
-      boton.textContent = "🔓 Iniciar sesión";
-      ocultarLogin(resultado.usuario);
-      cargarTodo();
-    })
-    .withFailureHandler(function(err) {
-      boton.disabled = false;
-      boton.textContent = "🔓 Iniciar sesión";
-      error.textContent = err && err.message ? err.message : "Usuario o contraseña incorrectos.";
-      if (passInput) {
-        passInput.select();
-        passInput.focus();
-      }
-    })
-    .iniciarSesionAdmin(usuario, clave);
+  try {
+    const resultado = await apiCall("iniciarSesionAdmin", { usuario, clave }, "POST");
+    if (!resultado || !resultado.ok || !resultado.token) {
+      throw new Error("No se pudo iniciar sesión.");
+    }
+    adminToken = resultado.token;
+    if (passInput) passInput.value = "";
+    boton.disabled = false;
+    boton.textContent = "🔓 Iniciar sesión";
+    ocultarLogin(resultado.usuario);
+    cargarTodo();
+  } catch (err) {
+    boton.disabled = false;
+    boton.textContent = "🔓 Iniciar sesión";
+    error.textContent = err.message || "Usuario o contraseña incorrectos.";
+    if (passInput) {
+      passInput.select();
+      passInput.focus();
+    }
+  }
 }
 
 function cerrarSesion() {
@@ -733,7 +806,7 @@ function cerrarSesion() {
   resultadosHistorial = [];
   mostrandoHistorial = false;
   if (token) {
-    google.script.run.withFailureHandler(function(){}).cerrarSesionAdmin(token);
+    apiCall("cerrarSesionAdmin", { token }, "POST").catch(function(){});
   }
   mostrarLogin();
 }
@@ -957,7 +1030,7 @@ function crearOpcionesImpresora(actual) {
   }).join("");
 }
 
-function buscarHistorial() {
+async function buscarHistorial() {
   const consulta = document.getElementById("buscar").value.trim();
   if (!consulta) {
     mostrarToast("Escribe un ticket, nombre o matrícula para buscar en el historial.", true);
@@ -965,19 +1038,19 @@ function buscarHistorial() {
     return;
   }
   mostrarLoading();
-  google.script.run
-    .withSuccessHandler(function(data) {
-      resultadosHistorial = data || [];
-      mostrandoHistorial = true;
-      document.getElementById("filtroEstado").value = "";
-      document.getElementById("filtroServicio").value = "";
-      renderizar();
-      if (!resultadosHistorial.length) {
-        mostrarToast("No se encontró ninguna solicitud histórica con ese criterio.", true);
-      }
-    })
-    .withFailureHandler(errorHandler)
-    .buscarHistorialSolicitudes(consulta, adminToken);
+  try {
+    const res = await apiCall("buscarHistorialSolicitudes", { q: consulta, token: adminToken }, "GET");
+    resultadosHistorial = res.data || [];
+    mostrandoHistorial = true;
+    document.getElementById("filtroEstado").value = "";
+    document.getElementById("filtroServicio").value = "";
+    renderizar();
+    if (!resultadosHistorial.length) {
+      mostrarToast("No se encontró ninguna solicitud histórica con ese criterio.", true);
+    }
+  } catch (err) {
+    errorHandler(err);
+  }
 }
 
 function volverActivas() {
@@ -989,7 +1062,7 @@ function volverActivas() {
   renderizar();
 }
 
-function guardar(fila) {
+async function guardar(fila) {
   const boton = document.getElementById("save-" + fila);
   const estado = document.getElementById("estado-" + fila).value;
   const impresora = document.getElementById("impresora-" + fila).value;
@@ -999,36 +1072,38 @@ function guardar(fila) {
   boton.disabled = true;
   boton.textContent = "⏳ Guardando...";
 
-  google.script.run
-    .withSuccessHandler(function(resultado) {
-      boton.disabled = false;
-      boton.textContent = "✓ Guardado";
-      mostrarToast(resultado.mensaje, false);
-
-      const solicitud = solicitudes.find(s => s.fila === fila);
-      if (solicitud) {
-        solicitud.estado = estado;
-        solicitud.impresora = impresora;
-        solicitud.tEstimado = tEstimado;
-        solicitud.notas = notas;
+  try {
+    const resultado = await apiCall("actualizarSolicitud", {
+      token: adminToken,
+      datos: {
+        fila: fila,
+        estado: estado,
+        impresora: impresora,
+        tEstimado: tEstimado,
+        notas: notas
       }
-      actualizarEstadisticas();
-      setTimeout(function() {
-        boton.textContent = "💾 Guardar cambios y notificar";
-      }, 1500);
-    })
-    .withFailureHandler(function(error) {
-      boton.disabled = false;
+    }, "POST");
+
+    boton.disabled = false;
+    boton.textContent = "✓ Guardado";
+    mostrarToast(resultado.mensaje || "Solicitud actualizada correctamente.", false);
+
+    const solicitud = solicitudes.find(s => s.fila === fila);
+    if (solicitud) {
+      solicitud.estado = estado;
+      solicitud.impresora = impresora;
+      solicitud.tEstimado = tEstimado;
+      solicitud.notas = notas;
+    }
+    actualizarEstadisticas();
+    setTimeout(function() {
       boton.textContent = "💾 Guardar cambios y notificar";
-      errorHandler(error);
-    })
-    .actualizarSolicitud({
-      fila: fila,
-      estado: estado,
-      impresora: impresora,
-      tEstimado: tEstimado,
-      notas: notas
-    }, adminToken);
+    }, 1500);
+  } catch (error) {
+    boton.disabled = false;
+    boton.textContent = "💾 Guardar cambios y notificar";
+    errorHandler(error);
+  }
 }
 
 function actualizarEstadisticas() {

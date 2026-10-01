@@ -619,12 +619,112 @@ function tplRechazada(nombre, ticket, notas) {
 }
 
 /*******************************************************
- * CONTROLADOR WEB (doGet)
- * - /exec          -> Cola de Prototipado pública (index.html)
- * - /exec?admin=1  -> Panel de administración (admin.html)
+ * CONTROLADOR WEB (doGet / doPost) — BACKEND API REST
+ * Soporta conexión desde GitHub Pages (JSON) y Apps Script
  *******************************************************/
+
+/**
+ * Devuelve respuesta JSON con headers para consumo externo desde GitHub Pages.
+ */
+function respuestaJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Enrutador centralizado para todas las acciones API (GET o POST).
+ */
+function manejarPeticionAPI(params) {
+  const action = (params && params.action) ? String(params.action).trim() : "";
+  if (!action) return null;
+
+  try {
+    switch (action) {
+      case "obtenerDatosPublicos": {
+        const data = obtenerDatosPublicos();
+        return respuestaJSON({ ok: true, data: data });
+      }
+
+      case "iniciarSesionAdmin": {
+        const usuario = params.usuario || params.user || "";
+        const clave = params.clave || params.pass || params.password || "";
+        const res = iniciarSesionAdmin(usuario, clave);
+        return respuestaJSON(res);
+      }
+
+      case "cerrarSesionAdmin": {
+        const token = params.token || "";
+        cerrarSesionAdmin(token);
+        return respuestaJSON({ ok: true });
+      }
+
+      case "validarSesionAdmin": {
+        const token = params.token || "";
+        const res = validarSesionAdmin(token);
+        return respuestaJSON(res);
+      }
+
+      case "obtenerConfiguracionAdmin": {
+        const token = params.token || "";
+        const config = obtenerConfiguracionAdmin(token);
+        return respuestaJSON({ ok: true, config: config });
+      }
+
+      case "obtenerSolicitudesActivas": {
+        const token = params.token || "";
+        const data = obtenerSolicitudesActivas(token);
+        return respuestaJSON({ ok: true, data: data });
+      }
+
+      case "buscarHistorialSolicitudes": {
+        const token = params.token || "";
+        const q = params.q || params.consulta || "";
+        const data = buscarHistorialSolicitudes(q, token);
+        return respuestaJSON({ ok: true, data: data });
+      }
+
+      case "actualizarSolicitud": {
+        const token = params.token || "";
+        let datos = params.datos;
+        if (typeof datos === "string") {
+          try { datos = JSON.parse(datos); } catch (e) {}
+        }
+        if (!datos) {
+          datos = {
+            fila: params.fila,
+            estado: params.estado,
+            impresora: params.impresora,
+            tEstimado: params.tEstimado,
+            notas: params.notas
+          };
+        }
+        const res = actualizarSolicitud(datos, token);
+        return respuestaJSON(res);
+      }
+
+      default:
+        return respuestaJSON({ ok: false, error: `Acción '${action}' no reconocida.` });
+    }
+  } catch (err) {
+    Logger.log("Error en manejarPeticionAPI (%s): %s", action, err);
+    return respuestaJSON({ ok: false, error: err.message || err.toString() });
+  }
+}
+
+/**
+ * Maneja peticiones GET:
+ * 1. Si incluye parámetro 'action' -> Responde JSON para GitHub Pages.
+ * 2. Si no incluye 'action' -> Muestra HTML (Apps Script Web App).
+ */
 function doGet(e) {
-  const esAdmin = e && e.parameter && e.parameter.admin === "1";
+  const params = (e && e.parameter) ? e.parameter : {};
+
+  if (params.action) {
+    const respuesta = manejarPeticionAPI(params);
+    if (respuesta) return respuesta;
+  }
+
+  const esAdmin = params.admin === "1";
   if (esAdmin) {
     return HtmlService.createHtmlOutputFromFile("admin")
       .setTitle("Administración — Prototipado A7-237")
@@ -633,6 +733,28 @@ function doGet(e) {
   return HtmlService.createHtmlOutputFromFile("index")
     .setTitle("Cola de Prototipado — Laboratorio de Mecatrónica")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Maneja peticiones POST desde GitHub Pages (login, actualizar estados, etc.).
+ */
+function doPost(e) {
+  let params = {};
+
+  if (e && e.postData && e.postData.contents) {
+    try {
+      params = JSON.parse(e.postData.contents);
+    } catch (errJson) {
+      params = e.parameter || {};
+    }
+  } else if (e && e.parameter) {
+    params = e.parameter;
+  }
+
+  const respuesta = manejarPeticionAPI(params);
+  if (respuesta) return respuesta;
+
+  return respuestaJSON({ ok: false, error: "No se proporcionó una acción válida en POST." });
 }
 
 /*******************************************************

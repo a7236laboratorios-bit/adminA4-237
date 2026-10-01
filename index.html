@@ -179,8 +179,11 @@ footer {
 </head>
 <body>
 <header>
-  <img src="https://javier.rodriguez.org.mx/itesm/2014/tecnologico-de-monterrey-white.webp" alt="Tec de Monterrey">
-  <h1>Cola de Prototipado — Laboratorio de Mecatrónica</h1>
+  <div style="display:flex;align-items:center;gap:15px;">
+    <img src="https://javier.rodriguez.org.mx/itesm/2014/tecnologico-de-monterrey-white.webp" alt="Tec de Monterrey">
+    <h1>Cola de Prototipado — Laboratorio de Mecatrónica</h1>
+  </div>
+  <a href="admin.html" style="color:white;text-decoration:none;background:rgba(255,255,255,.18);padding:8px 16px;border-radius:20px;font-size:.85rem;font-weight:600;display:inline-flex;align-items:center;gap:6px;transition:.2s;border:1px solid rgba(255,255,255,.3);">🔐 Panel Admin</a>
 </header>
 
 <div class="subtitulo">
@@ -207,47 +210,114 @@ footer {
 
 <footer>
   Actualizado automáticamente cada 30 s — Tecnológico de Monterrey © 2026<br>
-  Laboratorio de Mecatrónica A7-237
+  Laboratorio de Mecatrónica A7-237<br>
+  <small style="margin-top:6px;display:inline-block;color:#94a3b8;">
+    <a href="javascript:void(0)" onclick="cambiarApiUrl()" style="color:#0067b1;text-decoration:none;">⚙️ Configurar conexión con Google Sheets</a>
+  </small>
 </footer>
 
 <script>
-function cargarDatos() {
-  google.script.run
-    .withSuccessHandler(function(data) {
-      const tbody = document.getElementById("body");
-      tbody.innerHTML = "";
-      if (!data || !data.length) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="4" class="sin-datos">
-              📭 No hay solicitudes activas o recientes en este momento.
-            </td>
-          </tr>
-        `;
-        return;
-      }
-      data.forEach(function(row) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="ticket">${escapar(row.ticket)}</td>
-          <td class="servicio">${escapar(row.servicio)}</td>
-          <td>${estadoVisual(row.estado)}</td>
-          <td class="actualizacion">${escapar(row.fecha)}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    })
-    .withFailureHandler(function(error) {
-      console.error("Error al cargar datos:", error);
-      document.getElementById("body").innerHTML = `
+// ==========================================
+// CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS
+// ==========================================
+// Puedes colocar aquí directamente la URL que te da Apps Script al implementar como Web App:
+const DEFAULT_API_URL = "";
+
+function obtenerApiUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("api")) {
+    const a = params.get("api").trim();
+    localStorage.setItem("LAB_API_URL", a);
+    return a;
+  }
+  const guardada = localStorage.getItem("LAB_API_URL");
+  if (guardada && guardada.trim()) return guardada.trim();
+  return DEFAULT_API_URL.trim();
+}
+
+async function cargarDatos() {
+  const apiUrl = obtenerApiUrl();
+  const tbody = document.getElementById("body");
+
+  if (!apiUrl) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="sin-datos" style="padding:30px 15px;">
+          <div style="font-size:1.1rem;font-weight:700;color:#004b87;margin-bottom:8px;">⚙️ Conexión inicial requerida</div>
+          <div style="font-size:0.9rem;color:#4b5563;margin-bottom:15px;">Ingresa la URL de tu Web App de Google Apps Script (la que termina en <code>/exec</code>):</div>
+          <div style="display:flex;gap:8px;max-width:550px;margin:auto;">
+            <input id="apiInput" type="text" placeholder="https://script.google.com/macros/s/.../exec" style="flex:1;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.85rem;">
+            <button onclick="guardarApiUrl()" style="padding:10px 18px;background:#004b87;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Conectar</button>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  try {
+    const url = new URL(apiUrl);
+    url.searchParams.set("action", "obtenerDatosPublicos");
+    url.searchParams.set("_t", Date.now()); // Evitar caché
+
+    const resp = await fetch(url.toString(), { method: "GET" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || "Error al sincronizar datos");
+
+    const data = json.data || [];
+    tbody.innerHTML = "";
+    if (!data.length) {
+      tbody.innerHTML = `
         <tr>
-          <td colspan="4" class="error">
-            ❌ No se pudieron sincronizar las solicitudes. Reintentando en breve...
+          <td colspan="4" class="sin-datos">
+            📭 No hay solicitudes activas o recientes en este momento.
           </td>
         </tr>
       `;
-    })
-    .obtenerDatosPublicos();
+      return;
+    }
+    data.forEach(function(row) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="ticket">${escapar(row.ticket)}</td>
+        <td class="servicio">${escapar(row.servicio)}</td>
+        <td>${estadoVisual(row.estado)}</td>
+        <td class="actualizacion">${escapar(row.fecha)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (error) {
+    console.error("Error al cargar datos:", error);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="error">
+          ❌ No se pudo conectar con Google Sheets (${escapar(error.message)}).<br>
+          <button onclick="cambiarApiUrl()" style="margin-top:12px;padding:7px 14px;cursor:pointer;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:0.82rem;font-weight:600;">⚙️ Actualizar URL de Apps Script</button>
+        </td>
+      </tr>
+    `;
+  }
+}
+
+function guardarApiUrl() {
+  const input = document.getElementById("apiInput");
+  const val = input ? input.value.trim() : "";
+  if (!val) {
+    alert("Por favor pega la URL completa de tu Web App de Apps Script.");
+    return;
+  }
+  localStorage.setItem("LAB_API_URL", val);
+  cargarDatos();
+}
+
+function cambiarApiUrl() {
+  const actual = localStorage.getItem("LAB_API_URL") || DEFAULT_API_URL || "";
+  const nueva = prompt("Pega la URL de tu Web App de Google Apps Script (terminada en /exec):", actual);
+  if (nueva !== null && nueva.trim() !== "") {
+    localStorage.setItem("LAB_API_URL", nueva.trim());
+    cargarDatos();
+  }
 }
 
 function estadoVisual(estado) {

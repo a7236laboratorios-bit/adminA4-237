@@ -183,29 +183,53 @@ Para que el sistema asigne tickets y envíe correos automáticamente:
 
 ---
 
-## 🌐 Publicación de la Aplicación Web (Web App)
+---
 
-1. En el editor de Apps Script, haz clic en el botón azul superior **Implementar > Nueva implementación**.
-2. Haz clic en el ícono de engranaje ⚙️ a la izquierda de *"Seleccionar tipo"* y elige **Aplicación web**.
-3. Configura:
-   - **Descripción:** `Versión de Producción Prototipado A7-237`
-   - **Ejecutar como:** `Yo (tu correo institucional)`
-   - **Quién tiene acceso:** `Cualquier usuario` (para que los alumnos puedan consultar la cola pública sin necesidad de iniciar sesión).
-4. Haz clic en **Implementar**.
-5. Se generará una URL que termina en `/exec`.
+## 🌐 Publicación en GitHub Pages (Frontend Web)
 
-### Enlaces de Uso:
-- **Cola Pública de Alumnos:**
+Tus páginas HTML ahora se alojan y se publican directamente en **GitHub Pages**, mientras que Google Apps Script funciona como el motor/backend seguro que lee y escribe en Google Sheets:
+
+### 1. Activar GitHub Pages en tu repositorio:
+1. Entra a tu repositorio: [https://github.com/a7236laboratorios-bit/adminA4-237](https://github.com/a7236laboratorios-bit/adminA4-237).
+2. Haz clic en la pestaña **Settings** (⚙️ Configuración) arriba a la derecha.
+3. En el menú lateral izquierdo, haz clic en **Pages**.
+4. En la sección **Build and deployment > Branch**:
+   - Selecciona la rama: **`main`**.
+   - Selecciona la carpeta: **`/(root)`**.
+   - Haz clic en **Save** (Guardar).
+5. En 1-2 minutos GitHub generará la URL de tu página web.
+
+### 2. Tus enlaces en GitHub Pages:
+- 👥 **Tablero Público de Solicitudes:**
   ```text
-  https://script.google.com/macros/s/ID_DE_TU_SCRIPT/exec
+  https://a7236laboratorios-bit.github.io/adminA4-237/
   ```
-  *(Muestra en tiempo real el turno, servicio, estado y última actualización).*
-- **Panel Administrativo del Laboratorio:**
+- 🔐 **Panel Administrativo del Laboratorio:**
   ```text
-  https://script.google.com/macros/s/ID_DE_TU_SCRIPT/exec?admin=1
+  https://a7236laboratorios-bit.github.io/adminA4-237/admin.html
   ```
-  - **Credenciales iniciales:** Usuario: `admin` | Contraseña: `A7237SPR` *(Gestionadas en la hoja `contraseña`)*.
-  - *(Permite asignar impresoras, estimar tiempos, cambiar estados y notificar al alumno).*
+  *(Ingresas con el Usuario y Contraseña registrados en la hoja `contraseña`)*.
+
+---
+
+## ⚙️ Conectar GitHub Pages con Google Apps Script (Backend API)
+
+Para que tu página en GitHub Pages se comunique con Google Sheets y envíe correos:
+
+1. **Implementar Apps Script como Web App API:**
+   - Abre tu [Google Sheet](https://docs.google.com/spreadsheets/d/1oPwQWPuMcwc0Zo2PFuBia5U4CTxgvY1vvEKz3Bn62Aw/edit?usp=sharing) y ve a **Extensiones > Apps Script**.
+   - Haz clic en **Implementar > Nueva implementación**.
+   - Tipo: **Aplicación web**.
+   - Configura:
+     - **Ejecutar como:** `Yo (tu cuenta institucional)`
+     - **Quién tiene acceso:** `Cualquier usuario` *(indispensable para que GitHub Pages pueda consumir la API pública y validar logins)*.
+   - Haz clic en **Implementar** y copia la URL generada (que termina en `/exec`).
+
+2. **Vincular la URL en tu sitio de GitHub Pages:**
+   - Al abrir por primera vez tu sitio en GitHub Pages (`https://a7236laboratorios-bit.github.io/adminA4-237/`), verás un recuadro de conexión inicial.
+   - Pega tu URL de Apps Script (la que termina en `/exec`) y presiona **Conectar**.
+   - Esta URL queda guardada en tu navegador (`localStorage`) y se comparte automáticamente entre la cola pública y el panel administrativo.
+   - *(Opcional)*: También puedes dejarla fija en el código editando la variable `const DEFAULT_API_URL = "TU_URL_DE_APPS_SCRIPT_AQUI/exec";` en `index.html` y `admin.html`.
 
 ---
 
