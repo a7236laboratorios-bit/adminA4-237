@@ -230,7 +230,6 @@ function onOpen() {
       .addSeparator()
       .addItem("🔑 Abrir / Crear hoja de contraseñas", "abrirHojaContrasenas")
       .addSeparator()
-      .addItem("🚀 Simular flujo completo (Formulario a Entrega - Yazmin)", "simularFlujoCompletoYazmin")
       .addItem("📧 Enviar prueba rápida (Yazmin)", "testCorreoYazmin")
       .addItem("📨 Probar TODAS las plantillas de correo", "testEnviarTodasLasPlantillas")
       .addItem("🧪 Probar simulación de envío de formulario", "testSimularFormSubmit")
@@ -738,11 +737,6 @@ function manejarPeticionAPI(params) {
         return respuestaJSON(res);
       }
 
-      case "simularFlujoYazmin": {
-        const res = simularFlujoCompletoYazmin(params.destinatario);
-        return respuestaJSON(res);
-      }
-
       default:
         return respuestaJSON({ ok: false, error: `Acción '${action}' no reconocida.` });
     }
@@ -827,6 +821,8 @@ function obtenerDatosPublicos() {
     if (esActiva || esReciente) {
       resultado.push({
         ticket: ticket,
+        alumno: String(valor(r, cols.nombre) || "").trim(),
+        nombre: String(valor(r, cols.nombre) || "").trim(),
         servicio: String(valor(r, cols.servicio) || "").trim(),
         estado: estado,
         fecha: (!isNaN(fecha.getTime()))
@@ -1412,138 +1408,4 @@ function corregirFilasDesfasadasExistentes() {
   try {
     SpreadsheetApp.getUi().alert("🔧 Resultado de corrección:\n\n" + msg);
   } catch (e) {}
-}
-
-/**
- * 6. SIMULACIÓN COMPLETA DE TODAS LAS OPERACIONES (YAZMIN NÚÑEZ)
- * Simula el ciclo de vida completo:
- * Formulario enviado -> Ticket asignado -> En revisión -> Aprobada -> En impresión -> Lista -> Notificaciones
- */
-function simularFlujoCompletoYazmin(destinatario) {
-  const correo = destinatario || CONFIG.CORREO_PRUEBAS;
-  const nombre = "Yazmin Núñez";
-  const matricula = "A01234567";
-  const materia = "Proyecto de Mecatrónica";
-  const profesor = "Dr. Roberto Hernández";
-  const servicio = "Impresión 3D";
-  const archivoGcode = "https://drive.google.com/file/d/1wXYZ_simulacion_pieza_yazmin.gcode/view";
-  const tipoMaterial = "PLA (Filamento Propio)";
-  const marcaMaterial = "Polymaker Black";
-  const fechaLimite = "Dentro de 2 días";
-  const observaciones = "Pieza para el robot móvil del laboratorio. Traeré filamento propio.";
-
-  const sh = obtenerHojaRespuestas();
-  const cols = obtenerIndices(sh);
-  const logSimulacion = [];
-
-  logSimulacion.push("🚀 INICIO DE SIMULACIÓN DE FLUJO COMPLETO");
-  logSimulacion.push(`👤 Solicitante: ${nombre} (${correo}) | Matrícula: ${matricula}`);
-  logSimulacion.push(`🛠️ Servicio: ${servicio} | Material: ${tipoMaterial}`);
-
-  // 1. Simular la llegada de la fila desde Google Forms
-  const nuevaFila = Math.max(sh.getLastRow() + 1, 2);
-  const numCols = Math.max(sh.getLastColumn(), 34);
-  const filaDatos = new Array(numCols).fill("");
-
-  filaDatos[cols.timestamp - 1] = new Date();
-  filaDatos[cols.nombre - 1] = nombre;
-  filaDatos[cols.matricula - 1] = matricula;
-  filaDatos[cols.correo - 1] = correo;
-  filaDatos[cols.materia - 1] = materia;
-  filaDatos[cols.profesor - 1] = profesor;
-  filaDatos[cols.servicio - 1] = servicio;
-  filaDatos[cols.archivo_imprimir - 1] = archivoGcode;
-  filaDatos[cols.tipo_material - 1] = tipoMaterial;
-  filaDatos[cols.marca_material - 1] = marcaMaterial;
-  filaDatos[cols.fecha_limite - 1] = fechaLimite;
-  filaDatos[cols.acepta - 1] = "Sí, acepto el reglamento";
-  filaDatos[cols.observaciones - 1] = observaciones;
-
-  sh.getRange(nuevaFila, 1, 1, numCols).setValues([filaDatos]);
-  SpreadsheetApp.flush();
-  logSimulacion.push(`✓ Paso 1: Formulario recibido. Fila ${nuevaFila} insertada en "${sh.getName()}".`);
-
-  // 2. Ejecutar onFormSubmit (Generación de Ticket y primer correo)
-  const ticket = generarTicket(matricula);
-  sh.getRange(nuevaFila, cols.ticket).setValue(ticket);
-  sh.getRange(nuevaFila, cols.estado).setValue("En revisión");
-  sh.getRange(nuevaFila, cols.notificado).setValue("si");
-  SpreadsheetApp.flush();
-
-  const asuntoRecibido = `[${ticket}] Solicitud recibida — Impresión 3D`;
-  const htmlRecibido = tplRecibido3D(nombre, ticket);
-  enviarCorreo({ para: correo, asunto: asuntoRecibido, html: htmlRecibido });
-  logSimulacion.push(`✓ Paso 2: Ticket [${ticket}] asignado. Estado: 'En revisión'. Correo de confirmación enviado a ${correo}.`);
-
-  // 3. Simular consulta en Cola Pública (GitHub Pages)
-  const colaPublica = obtenerDatosPublicos();
-  const visible = colaPublica.some(it => it.ticket === ticket);
-  logSimulacion.push(`✓ Paso 3: Cola Pública sincronizada (Visible: ${visible ? "SÍ" : "NO"}).`);
-
-  // 4. Técnico revisa en panel administrativo y APRUEBA
-  const impresoraAsignada = "Impresora 1";
-  const tiempoEstimado = "02:45";
-  const notasTecnico = "Archivo GCODE verificado sin colisiones. Traer bobina de filamento PLA etiquetada con tu ticket a A7-237.";
-
-  sh.getRange(nuevaFila, cols.impresora).setValue(impresoraAsignada);
-  sh.getRange(nuevaFila, cols.t_estimado).setValue(tiempoEstimado);
-  sh.getRange(nuevaFila, cols.notas).setValue(notasTecnico);
-  sh.getRange(nuevaFila, cols.estado).setValue("Aprobada");
-  sh.getRange(nuevaFila, cols.notificado).setValue("no");
-  SpreadsheetApp.flush();
-
-  procesarCambioEstado(sh, nuevaFila, cols);
-  logSimulacion.push(`✓ Paso 4: Administrador aprueba. Impresora: '${impresoraAsignada}', Tiempo: ${tiempoEstimado}h. Correo de APROBACIÓN con requisitos de filamento enviado.`);
-
-  // 5. Inicia impresión en máquina
-  sh.getRange(nuevaFila, cols.estado).setValue("En impresión");
-  sh.getRange(nuevaFila, cols.notificado).setValue("no");
-  SpreadsheetApp.flush();
-  procesarCambioEstado(sh, nuevaFila, cols);
-  const tInicio = sh.getRange(nuevaFila, cols.t_inicio).getValue();
-  logSimulacion.push(`✓ Paso 5: Estado 'En impresión'. Marca de tiempo registrada: ${formatearFecha(tInicio)}.`);
-
-  // 6. Finaliza impresión y queda lista para recoger
-  sh.getRange(nuevaFila, cols.estado).setValue("Lista");
-  sh.getRange(nuevaFila, cols.notificado).setValue("no");
-  SpreadsheetApp.flush();
-  procesarCambioEstado(sh, nuevaFila, cols);
-  const tFin = sh.getRange(nuevaFila, cols.t_fin).getValue();
-  logSimulacion.push(`✓ Paso 6: Estado 'Lista'. Marca de fin: ${formatearFecha(tFin)}. Correo de aviso de recogida enviado a ${correo}.`);
-
-  const reporteFinal = logSimulacion.join("\n");
-  Logger.log("\n" + reporteFinal);
-
-  // Correo de resumen final de la simulación
-  enviarCorreo({
-    para: correo,
-    asunto: `[SIMULACIÓN EXITOSA][${ticket}] Ciclo de prototipado completado`,
-    html: `
-      <div style="font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#f8fafc;padding:22px;border-radius:12px;line-height:1.6;">
-        <h2 style="color:#38bdf8;margin-top:0;">🏁 Simulación Integral de Prototipado Completada</h2>
-        <p>Se ejecutaron todas las operaciones desde la recepción de Google Forms hasta la entrega final:</p>
-        <pre style="background:#1e293b;padding:15px;border-radius:8px;color:#a5f3fc;font-size:0.88rem;white-space:pre-wrap;">${reporteFinal}</pre>
-        <div style="margin:16px 0;padding:14px;background:#1e293b;border-left:5px solid #38bdf8;border-radius:8px;">
-          <b style="color:#38bdf8;font-size:0.95em;">📊 Cola de impresión y prototipado en línea:</b><br>
-          <span style="color:#cbd5e1;font-size:0.9em;">Puedes consultar el progreso de tus piezas en tiempo real en:</span><br>
-          <a href="${CONFIG.URL_COLA_PUBLIC}" style="display:inline-block;margin-top:8px;padding:9px 18px;background:#0284c7;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:700;font-size:0.88em;">Ver Cola de Impresión en Vivo &rarr;</a>
-        </div>
-        <p style="margin-bottom:0;color:#94a3b8;">Fila en Google Sheets: <b>${nuevaFila}</b> | Ticket oficial: <b>${ticket}</b></p>
-      </div>`
-  });
-
-  try {
-    SpreadsheetApp.getUi().alert(
-      `🎉 Simulación de ciclo completo exitosa:\n\n` +
-      `Ticket: ${ticket}\nFila: ${nuevaFila}\n\n` +
-      `Se enviaron las notificaciones a ${correo} y se actualizaron los estados en tiempo real.`
-    );
-  } catch (e) {}
-
-  return {
-    ok: true,
-    ticket: ticket,
-    fila: nuevaFila,
-    reporte: logSimulacion
-  };
 }

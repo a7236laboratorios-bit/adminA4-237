@@ -600,7 +600,6 @@ textarea {
     </select>
     <button class="refresh" onclick="cargarTodo()">🔄 Actualizar</button>
     <button class="history-btn" onclick="buscarHistorial()" title="Consultar solicitudes concluidas o canceladas">🗂️ Buscar historial</button>
-    <button class="history-btn" onclick="ejecutarSimulacionYazmin()" style="background:#059669;color:white;border-color:#059669;font-weight:700;" title="Simular flujo completo desde Formulario hasta Entrega para Yazmin Núñez">🚀 Simular Solicitud (Yazmin)</button>
   </div>
 
   <!-- LISTA DE SOLICITUDES -->
@@ -1087,28 +1086,6 @@ function volverActivas() {
   document.getElementById("filtroEstado").value = "";
   document.getElementById("filtroServicio").value = "";
   renderizar();
-}
-
-async function ejecutarSimulacionYazmin() {
-  const correo = prompt("Ingresa el correo al que se enviarán las notificaciones de la simulación:", "nunez.yazmin@tec.mx");
-  if (!correo) return;
-  mostrarToast("🚀 Ejecutando simulación completa en Google Sheets...", false);
-  try {
-    const res = await apiCall("simularFlujoYazmin", { destinatario: correo }, "POST");
-    if (res && res.ok) {
-      alert("🎉 ¡Simulación de ciclo completo ejecutada con éxito!\n\n" +
-            "👤 Solicitante: Yazmin Núñez (" + correo + ")\n" +
-            "🎟️ Ticket generado: " + res.ticket + "\n" +
-            "📊 Fila en Sheets: " + res.fila + "\n\n" +
-            "Se ejecutaron las 6 fases (Formulario -> Ticket -> Aprobada -> En impresión -> Lista -> Notificaciones por correo).\n" +
-            "Revisa la bandeja de entrada de " + correo + ".");
-      cargarTodo();
-    } else {
-      alert("Error en la simulación: " + (res && res.error ? res.error : "Desconocido"));
-    }
-  } catch (e) {
-    alert("Error al ejecutar la simulación: " + e.message);
-  }
 }
 
 async function guardar(fila) {
