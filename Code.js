@@ -18,11 +18,12 @@ const CONFIG = {
   ID_SPREADSHEET: "1oPwQWPuMcwc0Zo2PFuBia5U4CTxgvY1vvEKz3Bn62Aw",
 
   // URL del ejecutable Web App (/exec) para peticiones y sincronización
-  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbwjrNFR0kdGkjX36g0E7TB3zAfRRsmm2ZMnjPTXiVRD28xLAfidE9eWrOmVhsKLTclY/exec",
+  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbxfHs9GPJTxdVX_Ncf25wR1_73VGQL3KuEhB11PNZGO9iJC2Tj_WMn5_hYrnyxE7wGH6A/exec",
 
   // Datos institucionales para correos
   REMITENTE_NOMBRE: "Laboratorio de Mecatrónica",
-  CC_INTERNA: "a7236laboratorios@gmail.com", // Correo interno del laboratorio
+  CORREO_CONTACTO: "a7236laboratorios@gmail.com", // Correo interno para dudas/contacto
+  CC_INTERNA: "ricardo.fermin@tec.mx, nunez.yazmin@tec.mx, a7236laboratorios@gmail.com", // Correos siempre en copia obligatoria
   CORREO_PRUEBAS: "nunez.yazmin@tec.mx",      // Correo configurado para pruebas
   HORARIO_ENTREGA: "Lun–Vie 7:00–20:00 en el Laboratorio de Mecatrónica (A7-237)",
 
@@ -455,12 +456,34 @@ function generarTicket(matricula) {
 
 function enviarCorreo({ para, asunto, html, cc }) {
   if (!para) return;
+
+  // Lista obligatoria de correos siempre en copia
+  const ccBase = ["ricardo.fermin@tec.mx", "nunez.yazmin@tec.mx"];
+  if (CONFIG.CC_INTERNA) {
+    CONFIG.CC_INTERNA.split(",").forEach(c => {
+      const limpio = c.trim();
+      if (limpio && !ccBase.includes(limpio)) ccBase.push(limpio);
+    });
+  }
+
+  // Integrar cualquier cc adicional que se envíe como parámetro
+  const todosCC = [...ccBase];
+  if (cc) {
+    cc.split(",").forEach(c => {
+      const limpio = c.trim();
+      if (limpio && !todosCC.includes(limpio)) todosCC.push(limpio);
+    });
+  }
+
+  // Excluir al destinatario principal de la copia para evitar correos duplicados
+  const ccFinal = todosCC.filter(c => c.toLowerCase() !== String(para).trim().toLowerCase());
+
   GmailApp.sendEmail(para, asunto, "", {
     name: CONFIG.REMITENTE_NOMBRE,
     htmlBody: html,
-    cc: cc !== undefined ? cc : CONFIG.CC_INTERNA
+    cc: ccFinal.join(", ")
   });
-  Logger.log("Correo enviado a %s | Asunto: %s", para, asunto);
+  Logger.log("Correo enviado a %s | CC: %s | Asunto: %s", para, ccFinal.join(", "), asunto);
 }
 
 /*******************************************************
@@ -648,7 +671,7 @@ function tplRechazada(nombre, ticket, notas) {
       <i>${notas || "Archivo o material no cumple los requisitos técnicos del laboratorio."}</i>
     </div>
     <p>Por favor realiza los ajustes necesarios en tu archivo/material y vuelve a enviar tu solicitud a través del formulario institucional.</p>
-    <p>Dudas en: <b>${CONFIG.CC_INTERNA}</b> o acudiendo a A7-237.</p>
+    <p>Dudas en: <b>${CONFIG.CORREO_CONTACTO || "a7236laboratorios@gmail.com"}</b> o acudiendo a A7-237.</p>
     <p>— <b>${CONFIG.REMITENTE_NOMBRE}</b></p>
   </div>`;
 }
