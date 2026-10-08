@@ -17,6 +17,9 @@ const CONFIG = {
   // ID del Google Sheet para conexión garantizada (bound o standalone)
   ID_SPREADSHEET: "1oPwQWPuMcwc0Zo2PFuBia5U4CTxgvY1vvEKz3Bn62Aw",
 
+  // URL del ejecutable Web App (/exec) para peticiones y sincronización
+  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbwjrNFR0kdGkjX36g0E7TB3zAfRRsmm2ZMnjPTXiVRD28xLAfidE9eWrOmVhsKLTclY/exec",
+
   // Datos institucionales para correos
   REMITENTE_NOMBRE: "Laboratorio de Mecatrónica",
   CC_INTERNA: "a7236laboratorios@gmail.com", // Correo interno del laboratorio
@@ -889,7 +892,8 @@ function obtenerConfiguracionAdmin(token) {
   return {
     estados: ADMIN_CONFIG.ESTADOS,
     estadosActivos: ADMIN_CONFIG.ESTADOS_ACTIVOS,
-    impresoras: ADMIN_CONFIG.IMPRESORAS
+    impresoras: ADMIN_CONFIG.IMPRESORAS,
+    urlWebApp: CONFIG.URL_WEB_APP
   };
 }
 

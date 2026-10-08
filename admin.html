@@ -619,26 +619,52 @@ textarea {
 // ==========================================
 // CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS
 // ==========================================
-// Puedes colocar aquí directamente la URL que te da Apps Script al implementar como Web App:
-const DEFAULT_API_URL = "";
+// URL fija y predeterminada del backend Web App de Apps Script (ejecutable /exec):
+const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbwjrNFR0kdGkjX36g0E7TB3zAfRRsmm2ZMnjPTXiVRD28xLAfidE9eWrOmVhsKLTclY/exec";
 
 function obtenerApiUrl() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.has("api")) {
-    const a = params.get("api").trim();
-    localStorage.setItem("LAB_API_URL", a);
-    return a;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("api")) {
+      const a = params.get("api").trim();
+      if (a) {
+        try { localStorage.setItem("LAB_API_URL", a); } catch (e) {}
+        return a;
+      }
+    }
+  } catch (e) {}
+
+  // 1. Usar directamente la URL fija del código si está presente
+  if (DEFAULT_API_URL && DEFAULT_API_URL.trim()) {
+    try {
+      const guardada = localStorage.getItem("LAB_API_URL");
+      if (guardada && guardada.trim() && guardada.trim().startsWith("https://script.google.com/macros/s/")) {
+        return guardada.trim();
+      }
+    } catch (e) {}
+    return DEFAULT_API_URL.trim();
   }
-  const guardada = localStorage.getItem("LAB_API_URL");
-  if (guardada && guardada.trim()) return guardada.trim();
-  return DEFAULT_API_URL.trim();
+
+  // 2. Fallback a localStorage si existiera una guardada
+  try {
+    const guardada = localStorage.getItem("LAB_API_URL");
+    if (guardada && guardada.trim() && guardada.trim().startsWith("https://script.google.com/macros/s/")) {
+      return guardada.trim();
+    }
+  } catch (e) {}
+
+  return "";
 }
 
 function cambiarApiUrl() {
-  const actual = localStorage.getItem("LAB_API_URL") || DEFAULT_API_URL || "";
+  let actual = DEFAULT_API_URL || "";
+  try {
+    const guardada = localStorage.getItem("LAB_API_URL");
+    if (guardada && guardada.trim()) actual = guardada.trim();
+  } catch (e) {}
   const nueva = prompt("Pega la URL de tu Web App de Google Apps Script (terminada en /exec):", actual);
   if (nueva !== null && nueva.trim() !== "") {
-    localStorage.setItem("LAB_API_URL", nueva.trim());
+    try { localStorage.setItem("LAB_API_URL", nueva.trim()); } catch (e) {}
     mostrarToast("URL de Apps Script actualizada.", false);
     if (adminToken) cargarTodo();
   }
