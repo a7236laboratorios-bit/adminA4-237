@@ -18,7 +18,7 @@ const CONFIG = {
   ID_SPREADSHEET: "1oPwQWPuMcwc0Zo2PFuBia5U4CTxgvY1vvEKz3Bn62Aw",
 
   // URL del ejecutable Web App (/exec) para peticiones y sincronización
-  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbxfHs9GPJTxdVX_Ncf25wR1_73VGQL3KuEhB11PNZGO9iJC2Tj_WMn5_hYrnyxE7wGH6A/exec",
+  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbylRJqajshFt4Pf4J162HX_3ghz2vqAnFvRlFk7mf1I_tAG7orXSlQ2a3W5HiUlZeUXnQ/exec",
 
   // Datos institucionales para correos
   REMITENTE_NOMBRE: "Laboratorio de Mecatrónica",
@@ -119,8 +119,9 @@ const ADMIN_CONFIG = {
     "Sin asignar",
     "Impresora 1",
     "Impresora 2",
+    "Impresora 3",
+    "Impresora 4",
     "Láser 1",
-    "Láser 2",
     "CNC / PCB 1"
   ]
 };

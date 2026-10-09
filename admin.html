@@ -619,7 +619,7 @@ textarea {
 // CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS
 // ==========================================
 // URL fija y predeterminada del backend Web App de Apps Script (ejecutable /exec):
-const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbxfHs9GPJTxdVX_Ncf25wR1_73VGQL3KuEhB11PNZGO9iJC2Tj_WMn5_hYrnyxE7wGH6A/exec";
+const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbylRJqajshFt4Pf4J162HX_3ghz2vqAnFvRlFk7mf1I_tAG7orXSlQ2a3W5HiUlZeUXnQ/exec";
 
 function obtenerApiUrl() {
   try {
@@ -716,7 +716,18 @@ let solicitudes = [];
 let resultadosHistorial = [];
 let mostrandoHistorial = false;
 let adminToken = "";
-let configuracion = { estados: [], impresoras: [] };
+let configuracion = {
+  estados: ["En revisión", "Aprobada", "En impresión", "En proceso de corte", "Lista", "Rechazada", "Cancelada"],
+  impresoras: [
+    "Sin asignar",
+    "Impresora 1",
+    "Impresora 2",
+    "Impresora 3",
+    "Impresora 4",
+    "Láser 1",
+    "CNC / PCB 1"
+  ]
+};
 
 window.onload = function() {
   mostrarLogin();
@@ -731,7 +742,7 @@ async function cargarTodo() {
   try {
     const resConfig = await apiCall("obtenerConfiguracionAdmin", { token: adminToken }, "GET");
     ocultarLogin();
-    configuracion = resConfig.config || { estados: [], impresoras: [] };
+    configuracion = resConfig.config || configuracion;
     llenarFiltros();
 
     const resData = await apiCall("obtenerSolicitudesActivas", { token: adminToken }, "GET");
