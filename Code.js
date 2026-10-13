@@ -25,7 +25,7 @@ const CONFIG = {
   CORREO_CONTACTO: "a7236laboratorios@gmail.com", // Correo interno para dudas/contacto
   CC_INTERNA: "ricardo.fermin@tec.mx, nunez.yazmin@tec.mx, a7236laboratorios@gmail.com", // Correos siempre en copia obligatoria
   CORREO_PRUEBAS: "nunez.yazmin@tec.mx",      // Correo configurado para pruebas
-  HORARIO_ENTREGA: "Lun–Vie 7:00–20:00 en el Laboratorio de Mecatrónica (A7-237)",
+  HORARIO_ENTREGA: "Lun–Vie 8:00–17:00 en el Laboratorio de Mecatrónica (A7-237)",
 
   // URL pública de la cola de impresión y prototipado (GitHub Pages)
   URL_COLA_PUBLIC: "https://a7236laboratorios-bit.github.io/adminA4-237/index.html",
@@ -180,7 +180,7 @@ function obtenerIndices(sh) {
   try {
     const lastCol = Math.max(sh.getLastColumn(), 34);
     const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
-    
+
     headers.forEach((hRaw, idx) => {
       const colNum = idx + 1;
       const h = norm(hRaw);
@@ -746,7 +746,7 @@ function manejarPeticionAPI(params) {
         const token = params.token || "";
         let datos = params.datos;
         if (typeof datos === "string") {
-          try { datos = JSON.parse(datos); } catch (e) {}
+          try { datos = JSON.parse(datos); } catch (e) { }
         }
         if (!datos) {
           datos = {
@@ -1203,7 +1203,7 @@ function abrirHojaContrasenas() {
         '• Columna C: Nombre o Rol (ej: Yazmin Núñez)\n' +
         '• Columna D: Activo (SI / NO)'
       );
-    } catch (e) {}
+    } catch (e) { }
   } catch (err) {
     Logger.log("abrirHojaContrasenas error: %s", err);
   }
@@ -1326,7 +1326,7 @@ function testDiagnosticoCompleto(destinatario) {
   try {
     const sh = obtenerHojaRespuestas();
     reporte.push(`✓ Hoja encontrada: "${sh.getName()}" (Filas: ${sh.getLastRow()}, Columnas: ${sh.getLastColumn()})`);
-    
+
     // 2. Verificar detección de columnas
     const cols = obtenerIndices(sh);
     reporte.push(`✓ Columna Ticket: ${cols.ticket} | Estado: ${cols.estado} | Notificado: ${cols.notificado}`);
@@ -1384,7 +1384,7 @@ ${reporteTexto}
 
   try {
     SpreadsheetApp.getUi().alert("Diagnóstico completo.\n\n" + reporteTexto + `\n\nReporte enviado a ${target}`);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 /**
@@ -1431,5 +1431,5 @@ function corregirFilasDesfasadasExistentes() {
   Logger.log(msg);
   try {
     SpreadsheetApp.getUi().alert("🔧 Resultado de corrección:\n\n" + msg);
-  } catch (e) {}
+  } catch (e) { }
 }

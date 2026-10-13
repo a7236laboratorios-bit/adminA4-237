@@ -44,6 +44,9 @@ sistema-laboratorio-prototipado/
    - `obtenerDatosPublicos()` muestra siempre todas las solicitudes en estado activo y mantiene visibles las solicitudes concluidas durante 3 días para que los alumnos confirmen la entrega de su pieza.
 5. **Suite de Pruebas Dirigidas a `nunez.yazmin@tec.mx`:**
    - Funciones especializadas para probar la entrega de correos, las 10 plantillas de notificación y el diagnóstico completo del sistema.
+6. **Horario Oficial de Entrega y Atención (A7-237):**
+   - Configurado en `CONFIG.HORARIO_ENTREGA` como: **`Lun–Vie 8:00–17:00 en el Laboratorio de Mecatrónica (A7-237)`**.
+   - Se inyecta automáticamente en todas las plantillas de correo para estudiantes (recepción de material, entrega de pieza, etc.) y se visualiza en `index.html` y `admin.html`.
 
 ---
 

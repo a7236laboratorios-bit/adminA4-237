@@ -265,6 +265,10 @@
 
   <div class="subtitulo">
     Consulta el estado y avance de tu solicitud en tiempo real.
+    <div
+      style="margin-top:10px;display:inline-block;background:#e0f2fe;color:#0369a1;padding:6px 16px;border-radius:20px;font-size:0.86rem;font-weight:600;border:1px solid #bae6fd;">
+      ⏰ Horario de atención y entrega: <b>Lun–Vie 8:00–17:00</b> en el Laboratorio de Mecatrónica (A7-237)
+    </div>
   </div>
 
   <div class="table-container">
@@ -288,7 +292,7 @@
 
   <footer>
     Actualizado automáticamente cada 30 s — Tecnológico de Monterrey © 2026<br>
-    Laboratorio de Mecatrónica A7-237<br>
+    Laboratorio de Mecatrónica A7-237 &bull; <b>Horario: Lun–Vie 8:00–17:00</b><br>
     <small style="margin-top:6px;display:inline-block;color:#94a3b8;">
       <a href="javascript:void(0)" onclick="cambiarApiUrl()" style="color:#0067b1;text-decoration:none;">⚙️ Configurar
         conexión con Google Sheets</a>
@@ -300,7 +304,7 @@
     // CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS
     // ==========================================
     // URL fija y predeterminada del backend Web App de Apps Script (ejecutable /exec):
-    const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbz3diBlwMq780A4bsdGvAbCsJSN6BgeUyEWOuoEeFlcfYjEz7HcoECZFDoPaguiWZR1Ng/exec";
+    const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzfhE6gWlGamC3HIkApZ5bJNXcfOZKgF5fJ8jag2e2y0HlkHcCBs0C1x1kothcm2EH96A/exec";
 
     function obtenerApiUrl() {
       try {
