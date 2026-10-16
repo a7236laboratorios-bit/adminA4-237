@@ -272,3 +272,19 @@ Puedes ejecutarlas desde el editor de Apps Script o desde el menú personalizado
 
 ### 5. `corregirFilasDesfasadasExistentes()`
 - Revisa las filas existentes en la hoja que fueron guardadas con el código anterior y corrige el desfase de columnas automáticamente.
+
+
+## 🚀 Publicación automática de Apps Script (GitHub Actions)
+
+Cada vez que se actualiza `main` con cambios en `Code.js`, `admin.html`, `index.html` o `appsscript.json`,
+el workflow `.github/workflows/deploy-apps-script.yml` sube el código al proyecto de Apps Script y publica
+una **nueva versión en la misma implementación**, así la URL `/exec` no cambia y nunca queda desactualizada.
+
+Configuración (una sola vez):
+1. Activar la API en https://script.google.com/home/usersettings
+2. En tu computadora: `npx @google/clasp@2.4.2 login` (con la cuenta dueña del script). Se crea `~/.clasprc.json`.
+3. En GitHub: **Settings → Secrets and variables → Actions → New repository secret** con nombre `CLASPRC_JSON`
+   y como valor el contenido completo de `~/.clasprc.json`.
+
+⚠️ `clasp push` reemplaza el proyecto completo: cualquier archivo que exista en Apps Script y no esté en este repo se borrará.
+También se puede ejecutar a mano desde la pestaña **Actions → Publicar Apps Script → Run workflow**.

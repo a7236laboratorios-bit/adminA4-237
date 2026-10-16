@@ -1,0 +1,50 @@
+# Sube Code.js, admin.html, index.html y appsscript.json a Apps Script y publica
+# una nueva versión de la Web App en la MISMA implementación (la URL /exec no cambia).
+name: Publicar Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Code.js
+      - admin.html
+      - index.html
+      - appsscript.json
+      - .clasp.json
+      - .claspignore
+      - .github/workflows/deploy-apps-script.yml
+  workflow_dispatch:
+
+concurrency:
+  group: apps-script-deploy
+  cancel-in-progress: false
+
+env:
+  # ID de la implementación de la Web App (es el que aparece en la URL /exec)
+  DEPLOYMENT_ID: AKfycbylRJqajshFt4Pf4J162HX_3ghz2vqAnFvRlFk7mf1I_tAG7orXSlQ2a3W5HiUlZeUXnQ
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cargar credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::Falta el secret CLASPRC_JSON (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+
+      - name: Subir código a Apps Script
+        run: npx -y @google/clasp@2.4.2 push --force
+
+      - name: Publicar nueva versión de la Web App
+        run: npx -y @google/clasp@2.4.2 deploy --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
