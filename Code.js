@@ -328,7 +328,8 @@ function onFormSubmit(e) {
     }
 
     if (correo && correo.includes("@")) {
-      enviarCorreo({ para: correo, asunto, html });
+      // Recepción rutinaria de solicitud: NO incluye CC masivo para ahorrar cuota
+      enviarCorreo({ para: correo, asunto, html, incluirCC: false });
     }
   } catch (err) {
     Logger.log("Error crítico en onFormSubmit: %s\nStack: %s", err, err.stack);
@@ -403,10 +404,10 @@ function procesarCambioEstado(sh, row, cols) {
 
   if (!correo || !correo.includes("@")) {
     Logger.log("procesarCambioEstado: No hay correo válido para la fila %s", row);
-    return;
+    return { notifico: false, razon: "sin_correo" };
   }
 
-  // Notificación: Aprobada
+  // 1. Notificación: Aprobada (Estado Crítico -> Incluye CC)
   if (estado === "Aprobada" && notificado !== "aprobada") {
     const asunto = `[${ticket}] APROBADA — ${servicio}`;
     let html;
@@ -417,11 +418,12 @@ function procesarCambioEstado(sh, row, cols) {
     } else {
       html = tplAprobadaConFilamento(nombre, ticket);
     }
-    enviarCorreo({ para: correo, asunto, html });
+    const envio = enviarCorreo({ para: correo, asunto, html, incluirCC: true });
     sh.getRange(row, cols.notificado).setValue("aprobada");
+    return { notifico: true, enviado: envio.enviado, motivo: envio.razon || "" };
   }
 
-  // Notificación: Lista para recoger
+  // 2. Notificación: Lista para recoger (Estado Crítico -> Incluye CC)
   if (estado === "Lista" && notificado !== "lista") {
     const asunto = `[${ticket}] Lista para recoger — ${servicio}`;
     let html;
@@ -432,18 +434,32 @@ function procesarCambioEstado(sh, row, cols) {
     } else {
       html = tplListaSalon(nombre, ticket);
     }
-    enviarCorreo({ para: correo, asunto, html });
+    const envio = enviarCorreo({ para: correo, asunto, html, incluirCC: true });
     sh.getRange(row, cols.notificado).setValue("lista");
+    return { notifico: true, enviado: envio.enviado, motivo: envio.razon || "" };
   }
 
-  // Notificación: Rechazada
+  // 3. Notificación: Cancelada (Estado Crítico -> Incluye CC)
+  if (estado === "Cancelada" && notificado !== "cancelada") {
+    const notas = valor(data, cols.notas) || "La solicitud fue cancelada por el solicitante o por el laboratorio.";
+    const asunto = `[${ticket}] Solicitud CANCELADA — ${servicio}`;
+    const html = tplCancelada(nombre, ticket, notas);
+    const envio = enviarCorreo({ para: correo, asunto, html, incluirCC: true });
+    sh.getRange(row, cols.notificado).setValue("cancelada");
+    return { notifico: true, enviado: envio.enviado, motivo: envio.razon || "" };
+  }
+
+  // 4. Notificación: Rechazada (Estado Crítico -> Incluye CC)
   if (estado === "Rechazada" && notificado !== "rechazada") {
     const notas = valor(data, cols.notas) || "Archivo o material no apto o con errores de diseño.";
     const asunto = `[${ticket}] Solicitud RECHAZADA — ${servicio}`;
     const html = tplRechazada(nombre, ticket, notas);
-    enviarCorreo({ para: correo, asunto, html });
+    const envio = enviarCorreo({ para: correo, asunto, html, incluirCC: true });
     sh.getRange(row, cols.notificado).setValue("rechazada");
+    return { notifico: true, enviado: envio.enviado, motivo: envio.razon || "" };
   }
+
+  return { notifico: false };
 }
 
 /*******************************************************
@@ -455,36 +471,87 @@ function generarTicket(matricula) {
   return `L3D-${base}-${rand}`;
 }
 
-function enviarCorreo({ para, asunto, html, cc }) {
-  if (!para) return;
-
-  // Lista obligatoria de correos siempre en copia
-  const ccBase = ["ricardo.fermin@tec.mx", "nunez.yazmin@tec.mx"];
-  if (CONFIG.CC_INTERNA) {
-    CONFIG.CC_INTERNA.split(",").forEach(c => {
-      const limpio = c.trim();
-      if (limpio && !ccBase.includes(limpio)) ccBase.push(limpio);
-    });
+function enviarCorreo({ para, asunto, html, cc, incluirCC = false }) {
+  if (!para) {
+    Logger.log("enviarCorreo: Se omitió el envío porque no se especificó destinatario.");
+    return { enviado: false, razon: "sin_destinatario" };
   }
 
-  // Integrar cualquier cc adicional que se envíe como parámetro
-  const todosCC = [...ccBase];
-  if (cc) {
-    cc.split(",").forEach(c => {
-      const limpio = c.trim();
-      if (limpio && !todosCC.includes(limpio)) todosCC.push(limpio);
-    });
+  try {
+    // 1. Verificación preventiva de cuota diaria de Google Apps Script
+    let cuotaRestante = 0;
+    try {
+      cuotaRestante = MailApp.getRemainingDailyQuota();
+    } catch (qErr) {
+      Logger.log("Advertencia al consultar cuota restante: %s", qErr.message);
+      cuotaRestante = 100;
+    }
+
+    if (cuotaRestante <= 0) {
+      Logger.log("⚠️ CUOTA DIARIA DE CORREOS AGOTADA (0 disponible). No se envió correo a: %s | Asunto: %s", para, asunto);
+      return { enviado: false, razon: "cuota_agotada", cuotaRestante: 0 };
+    }
+
+    // 2. Gestión de Copia (CC): Solo incluir lista interna en estados críticos (Aprobada, Lista, Cancelada, Rechazada)
+    let ccFinal = [];
+    if (incluirCC) {
+      const ccBase = ["ricardo.fermin@tec.mx", "nunez.yazmin@tec.mx"];
+      if (CONFIG.CC_INTERNA) {
+        CONFIG.CC_INTERNA.split(",").forEach(c => {
+          const limpio = c.trim();
+          if (limpio && !ccBase.includes(limpio)) ccBase.push(limpio);
+        });
+      }
+      if (cc) {
+        cc.split(",").forEach(c => {
+          const limpio = c.trim();
+          if (limpio && !ccBase.includes(limpio)) ccBase.push(limpio);
+        });
+      }
+      // Excluir al destinatario principal de la copia para evitar duplicados
+      ccFinal = ccBase.filter(c => c.toLowerCase() !== String(para).trim().toLowerCase());
+    } else if (cc) {
+      // Si se especificó un CC puntual explícito sin ser copia masiva interna
+      cc.split(",").forEach(c => {
+        const limpio = c.trim();
+        if (limpio && limpio.toLowerCase() !== String(para).trim().toLowerCase() && !ccFinal.includes(limpio)) {
+          ccFinal.push(limpio);
+        }
+      });
+    }
+
+    // 3. Estrategia inteligente ante cuota baja: Si no alcanza para todos los CC pero sí para el estudiante
+    const totalDestinatarios = 1 + ccFinal.length;
+    if (cuotaRestante < totalDestinatarios) {
+      if (cuotaRestante >= 1 && ccFinal.length > 0) {
+        Logger.log("⚠️ Cuota baja (%s disponible, requiere %s). Se omite el CC para garantizar el envío al estudiante: %s", 
+          cuotaRestante, totalDestinatarios, para);
+        ccFinal = [];
+      } else {
+        Logger.log("⚠️ Cuota insuficiente (%s disponible, requiere %s). No se pudo enviar a: %s", 
+          cuotaRestante, totalDestinatarios, para);
+        return { enviado: false, razon: "cuota_insuficiente", cuotaRestante };
+      }
+    }
+
+    // 4. Envío seguro con GmailApp protegido
+    const opciones = {
+      name: CONFIG.REMITENTE_NOMBRE,
+      htmlBody: html
+    };
+    if (ccFinal.length > 0) {
+      opciones.cc = ccFinal.join(", ");
+    }
+
+    GmailApp.sendEmail(para, asunto, "", opciones);
+    Logger.log("✓ Correo enviado con éxito a %s | CC: %s | Asunto: %s (Cuota restante aprox: %s)", 
+      para, ccFinal.length > 0 ? ccFinal.join(", ") : "Ninguno", asunto, cuotaRestante - (1 + ccFinal.length));
+
+    return { enviado: true, cuotaRestante: cuotaRestante - (1 + ccFinal.length) };
+  } catch (err) {
+    Logger.log("❌ Error en enviarCorreo hacia %s: %s", para, err.message);
+    return { enviado: false, razon: "error_envio", error: err.message };
   }
-
-  // Excluir al destinatario principal de la copia para evitar correos duplicados
-  const ccFinal = todosCC.filter(c => c.toLowerCase() !== String(para).trim().toLowerCase());
-
-  GmailApp.sendEmail(para, asunto, "", {
-    name: CONFIG.REMITENTE_NOMBRE,
-    htmlBody: html,
-    cc: ccFinal.join(", ")
-  });
-  Logger.log("Correo enviado a %s | CC: %s | Asunto: %s", para, ccFinal.join(", "), asunto);
 }
 
 /*******************************************************
@@ -673,6 +740,23 @@ function tplRechazada(nombre, ticket, notas) {
     </div>
     <p>Por favor realiza los ajustes necesarios en tu archivo/material y vuelve a enviar tu solicitud a través del formulario institucional.</p>
     <p>Dudas en: <b>${CONFIG.CORREO_CONTACTO || "a7236laboratorios@gmail.com"}</b> o acudiendo a A7-237.</p>
+    <p>— <b>${CONFIG.REMITENTE_NOMBRE}</b></p>
+  </div>`;
+}
+
+// 11. Cancelada
+function tplCancelada(nombre, ticket, notas) {
+  return `
+  <div style="font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;line-height:1.5;">
+    <p>Hola <b>${nombre || "Estudiante"}</b>,</p>
+    <div style="margin:15px 0;padding:14px;border-left:5px solid #64748b;background:#f8fafc;border-radius:6px;">
+      <b style="color:#334155;font-size:1.05em;">🚫 Tu solicitud ${ticket} ha sido CANCELADA</b><br>
+      <i>${notas || "La solicitud fue cancelada por el solicitante o por el laboratorio."}</i>
+    </div>
+    <p>Si requieres mayor información o deseas volver a ingresar una solicitud, acude al <b>Laboratorio de Mecatrónica (A7-237)</b> o escribe a <b>${CONFIG.CORREO_CONTACTO || "a7236laboratorios@gmail.com"}</b>.</p>
+    <div style="margin:14px 0;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:0.88em;">
+      📋 Consulta el estatus en la <a href="${CONFIG.URL_COLA_PUBLIC}" style="color:#004b87;font-weight:700;text-decoration:none;">Cola de Prototipado en Línea &rarr;</a>
+    </div>
     <p>— <b>${CONFIG.REMITENTE_NOMBRE}</b></p>
   </div>`;
 }
@@ -1038,14 +1122,28 @@ function actualizarSolicitud(datos, token) {
   if (cols.t_estimado) sh.getRange(fila, cols.t_estimado).setValue(datos.tEstimado || "");
   if (cols.notas) sh.getRange(fila, cols.notas).setValue(datos.notas || "");
 
-  // 2. Procesar marcas de tiempo y notificaciones de correo
-  procesarCambioEstado(sh, fila, cols);
+  // 2. Procesar marcas de tiempo y notificaciones de correo de forma protegida
+  let notifInfo = null;
+  try {
+    notifInfo = procesarCambioEstado(sh, fila, cols);
+  } catch (errNotif) {
+    Logger.log("Aviso: Error en procesarCambioEstado para fila %s: %s", fila, errNotif.message);
+  }
   SpreadsheetApp.flush();
 
-  const ticket = sh.getRange(fila, cols.ticket).getValue();
+  const ticket = sh.getRange(fila, cols.ticket).getValue() || `Fila ${fila}`;
+  let mensaje = `Solicitud ${ticket} actualizada correctamente.`;
+  if (notifInfo && notifInfo.notifico && !notifInfo.enviado) {
+    if (notifInfo.motivo === "cuota_agotada" || notifInfo.motivo === "cuota_insuficiente") {
+      mensaje = `Solicitud ${ticket} guardada en hoja, pero la cuota diaria de correos de Google está agotada.`;
+    } else {
+      mensaje = `Solicitud ${ticket} guardada en hoja (aviso: no se pudo enviar correo de notificación).`;
+    }
+  }
+
   return {
     ok: true,
-    mensaje: `Solicitud ${ticket} actualizada correctamente.`
+    mensaje: mensaje
   };
 }
 
@@ -1274,17 +1372,19 @@ function testEnviarTodasLasPlantillas(destinatario) {
     { asunto: `[TEST 7/10][${t3D}] Lista para recoger — Impresión 3D`, html: tplListaSalon(nombre, t3D) },
     { asunto: `[TEST 8/10][${tLaser}] Lista para recoger — Corte Láser`, html: tplListaSalonLaser(nombre, tLaser) },
     { asunto: `[TEST 9/10][${tPCB}] Lista para recoger — Fabricación PCB`, html: tplListaSalonPCB(nombre, tPCB) },
-    { asunto: `[TEST 10/10][${t3D}] Solicitud RECHAZADA — Impresión 3D`, html: tplRechazada(nombre, t3D, "Prueba: El archivo excede las dimensiones máximas de la cama (250x250 mm).") }
+    { asunto: `[TEST 10/11][${t3D}] Solicitud RECHAZADA — Impresión 3D`, html: tplRechazada(nombre, t3D, "Prueba: El archivo excede las dimensiones máximas de la cama (250x250 mm).") },
+    { asunto: `[TEST 11/11][${t3D}] Solicitud CANCELADA — Impresión 3D`, html: tplCancelada(nombre, t3D, "Prueba: Solicitud cancelada a petición del usuario.") }
   ];
 
   Logger.log("Iniciando envío de %s plantillas de prueba a %s...", pruebas.length, target);
   pruebas.forEach((p, idx) => {
-    enviarCorreo({ para: target, asunto: p.asunto, html: p.html });
+    // En pruebas se omite el CC para no saturar las cuotas de los supervisores
+    enviarCorreo({ para: target, asunto: p.asunto, html: p.html, incluirCC: false });
     Utilities.sleep(400); // Pequeña pausa para no saturar la cuota
   });
 
   try {
-    SpreadsheetApp.getUi().alert(`✅ Se enviaron las 10 plantillas de correo a:\n${target}\n\nRevisa tu bandeja de entrada.`);
+    SpreadsheetApp.getUi().alert(`✅ Se enviaron las 11 plantillas de correo a:\n${target}\n\nRevisa tu bandeja de entrada.`);
   } catch (e) {
     Logger.log("Plantillas enviadas a %s", target);
   }
@@ -1300,10 +1400,10 @@ function testSimularFormSubmit(destinatario) {
 
   Logger.log("Simulando onFormSubmit con Ticket=%s y Correo=%s", ticketSimulado, target);
 
-  // Enviar correo de confirmación de recepción
+  // Enviar correo de confirmación de recepción (sin CC)
   const asunto = `[${ticketSimulado}] Solicitud recibida — Impresión 3D (Simulación)`;
   const html = tplRecibido3D(nombre, ticketSimulado);
-  enviarCorreo({ para: target, asunto: asunto, html: html });
+  enviarCorreo({ para: target, asunto: asunto, html: html, incluirCC: false });
 
   try {
     SpreadsheetApp.getUi().alert(
@@ -1368,7 +1468,15 @@ function testDiagnosticoCompleto(destinatario) {
     reporte.push(`✕ Error consulta pública: ${e.message}`);
   }
 
-  // 6. Probar envío de correo con el reporte
+  // 6. Verificar cuota de correo disponible en Google Apps Script
+  try {
+    const cuota = MailApp.getRemainingDailyQuota();
+    reporte.push(`✓ Cuota de correos restantes hoy: ${cuota} destinatarios`);
+  } catch (eCuota) {
+    reporte.push(`✕ No se pudo consultar la cuota de correos: ${eCuota.message}`);
+  }
+
+  // 7. Probar envío de correo con el reporte (sin CC para no gastar cuota)
   const reporteTexto = reporte.join("\n");
   Logger.log("\n" + reporteTexto);
 
@@ -1379,12 +1487,25 @@ function testDiagnosticoCompleto(destinatario) {
       <div style="font-family:monospace;background:#1e293b;color:#f8fafc;padding:20px;border-radius:10px;white-space:pre-wrap;">
         <h3 style="color:#38bdf8;margin-top:0;">📋 Reporte de Diagnóstico del Sistema</h3>
 ${reporteTexto}
-      </div>`
+      </div>`,
+    incluirCC: false
   });
 
   try {
     SpreadsheetApp.getUi().alert("Diagnóstico completo.\n\n" + reporteTexto + `\n\nReporte enviado a ${target}`);
   } catch (e) { }
+}
+
+/**
+ * 5. Consulta rápida e independiente de la cuota diaria de correos disponible.
+ */
+function consultarCuotaCorreo() {
+  const cuota = MailApp.getRemainingDailyQuota();
+  Logger.log("Cuota diaria restante de correos: %s destinatarios", cuota);
+  try {
+    SpreadsheetApp.getUi().alert(`📊 Cuota de correos restante hoy:\n\n${cuota} destinatarios disponibles.`);
+  } catch (e) { }
+  return cuota;
 }
 
 /**
