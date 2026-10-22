@@ -22,7 +22,7 @@ const CONFIG = {
   ID_SPREADSHEET: "1oPwQWPuMcwc0Zo2PFuBia5U4CTxgvY1vvEKz3Bn62Aw",
 
   // URL del ejecutable Web App (/exec) para peticiones y sincronización
-  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbx9SkchCZTvHi63zTHoCmBcVnClBtlZl7Z8Fgskr115dDh1sd6a8_PhXy0tRdeEC7k4cg/exec",
+  URL_WEB_APP: "https://script.google.com/macros/s/AKfycbwP_iJaG959ujrybHAq20SKxk8m6BD7rX5k3Eiu9_VsYv7zf_VpBCl0aT1ORYN1diZXKA/exec",
 
   // Datos institucionales para correos
   REMITENTE_NOMBRE: "Laboratorio de Mecatrónica",
