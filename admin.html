@@ -910,17 +910,20 @@
     let resultadosHistorial = [];
     let mostrandoHistorial = false;
     let adminToken = "";
+    // Versión esperada del backend (debe coincidir con VERSION_CODIGO en Code.js)
+    const VERSION_ESPERADA = "2026-10-16";
+    const IMPRESORAS_BASE = [
+      "Sin asignar",
+      "Impresora 1",
+      "Impresora 2",
+      "Impresora 3",
+      "Impresora 4",
+      "Láser 1",
+      "CNC / PCB 1"
+    ];
     let configuracion = {
       estados: ["En revisión", "Aprobada", "En impresión", "En proceso de corte", "Lista", "Rechazada", "Cancelada"],
-      impresoras: [
-        "Sin asignar",
-        "Impresora 1",
-        "Impresora 2",
-        "Impresora 3",
-        "Impresora 4",
-        "Láser 1",
-        "CNC / PCB 1"
-      ]
+      impresoras: IMPRESORAS_BASE.slice()
     };
 
     window.onload = function () {
@@ -936,7 +939,16 @@
       try {
         const resConfig = await apiCall("obtenerConfiguracionAdmin", { token: adminToken }, "GET");
         ocultarLogin();
-        configuracion = resConfig.config || configuracion;
+        const cfgServidor = resConfig.config || {};
+        configuracion = Object.assign({}, configuracion, cfgServidor);
+        // Unir la lista del servidor con la base para que nunca falten máquinas,
+        // aunque la Web App publicada tenga una lista vieja.
+        configuracion.impresoras = IMPRESORAS_BASE.concat(
+          (cfgServidor.impresoras || []).filter(m => !IMPRESORAS_BASE.includes(m))
+        );
+        if (cfgServidor.version !== VERSION_ESPERADA) {
+          mostrarToast("⚠️ La Web App de Apps Script está desactualizada. Publica una nueva versión: Implementar → Gestionar implementaciones → Editar → Nueva versión.", true);
+        }
         llenarFiltros();
 
         const resData = await apiCall("obtenerSolicitudesActivas", { token: adminToken }, "GET");
@@ -1174,6 +1186,7 @@
               <div class="service-details-grid">
                 ${crearInfoChip("Archivo Gerber", s.archivoPcb)}
                 ${crearInfoChip("Caras / Capas", s.capasPcb)}
+                ${s.caraPcb ? crearInfoChip("Cara (1 sola cara)", s.caraPcb) : ""}
                 ${crearInfoChip("Reglamento", s.reglamentoPcb)}
                 ${crearInfoChip("Observaciones", s.comentariosPcb)}
               </div>
@@ -1196,7 +1209,7 @@
             <div class="field">
               <label>Máquina asignada</label>
               <select id="impresora-${s.fila}">
-                ${crearOpcionesImpresora(s.impresora)}
+                ${crearOpcionesImpresora(s.impresora, tipo)}
               </select>
             </div>
             <div class="field">
@@ -1251,8 +1264,17 @@
       }).join("");
     }
 
-    function crearOpcionesImpresora(actual) {
-      let opciones = configuracion.impresoras.slice();
+    function crearOpcionesImpresora(actual, tipo) {
+      // Mostrar solo las máquinas que aplican al servicio (3D: Impresoras 1–4, Láser, CNC/PCB)
+      let opciones = configuracion.impresoras.filter(function (m) {
+        const v = String(m).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (/sin asignar/.test(v)) return true;
+        const esLaser = /laser/.test(v);
+        const esPcb = /cnc|pcb/.test(v);
+        if (tipo === "laser") return esLaser;
+        if (tipo === "pcb") return esPcb;
+        return !esLaser && !esPcb;
+      });
       if (actual && !opciones.includes(actual)) {
         opciones.unshift(actual);
       }

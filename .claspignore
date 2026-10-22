@@ -1,0 +1,6 @@
+# Solo se suben estos archivos a Apps Script; todo lo demás se ignora.
+**/**
+!Code.js
+!admin.html
+!index.html
+!appsscript.json

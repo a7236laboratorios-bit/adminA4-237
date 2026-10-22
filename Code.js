@@ -7,6 +7,10 @@
  ********************************************************************************/
 
 /***** CONFIGURACIÓN GENERAL *****/
+// Cambia este valor cada vez que publiques una nueva versión de la Web App.
+// El panel admin lo compara para avisar si la implementación (/exec) quedó desactualizada.
+const VERSION_CODIGO = "2026-10-16";
+
 const CONFIG = {
   // Hoja donde caen las respuestas del formulario
   HOJA_RESPUESTAS: "Servicio de Prototipado Rapido",
@@ -62,6 +66,7 @@ const CONFIG = {
     capas_pcb: 22,                // Col V: Cantidad de Caras
     reglamento_pcb: 23,           // Col W: Acepta el Reglamento?
     comentarios_observaciones: 24,// Col X: Comentarios u Observaciones
+    cara_pcb: 0,                  // Pregunta nueva "¿Qué cara?" (PCB de 1 cara). Se detecta por encabezado.
 
     // Gestión interna del Laboratorio (Cols Y–AG)
     ticket: 25,                   // Col Y: Ticket
@@ -195,6 +200,8 @@ function obtenerIndices(sh) {
       else if (/lugar\s*de\s*entrega/i.test(h)) cols.lugar_entrega = colNum;
       else if (/notas\s*internas/i.test(h)) cols.notas = colNum;
       else if (h === "notificado") cols.notificado = colNum;
+      // Pregunta nueva de PCB: "¿Qué cara?" (solo si es de una sola cara). Excluye "Cantidad de Caras".
+      else if (/\bcaras?\b/.test(h) && !/cantidad/.test(h)) cols.cara_pcb = colNum;
       else if (/servicio/i.test(h)) cols.servicio = colNum;
       else if (/nombre/i.test(h)) cols.nombre = colNum;
       else if (/matricula/i.test(h)) cols.matricula = colNum;
@@ -997,6 +1004,8 @@ function obtenerConfiguracionAdmin(token) {
     estados: ADMIN_CONFIG.ESTADOS,
     estadosActivos: ADMIN_CONFIG.ESTADOS_ACTIVOS,
     impresoras: ADMIN_CONFIG.IMPRESORAS,
+    horario: CONFIG.HORARIO_ENTREGA,
+    version: VERSION_CODIGO,
     urlWebApp: CONFIG.URL_WEB_APP
   };
 }
@@ -1094,6 +1103,7 @@ function armarObjetoSolicitud(r, filaNum, cols, esHistorial) {
     capasPcb: valor(r, cols.capas_pcb),
     reglamentoPcb: valor(r, cols.reglamento_pcb),
     comentariosPcb: valor(r, cols.comentarios_observaciones),
+    caraPcb: valor(r, cols.cara_pcb),
 
     historial: esHistorial
   };
@@ -1431,6 +1441,8 @@ function testDiagnosticoCompleto(destinatario) {
     const cols = obtenerIndices(sh);
     reporte.push(`✓ Columna Ticket: ${cols.ticket} | Estado: ${cols.estado} | Notificado: ${cols.notificado}`);
     reporte.push(`✓ Columna Servicio: ${cols.servicio} | Nombre: ${cols.nombre} | Correo: ${cols.correo}`);
+    reporte.push(`✓ Columna Caras PCB: ${cols.capas_pcb} | Cara PCB (nueva): ${cols.cara_pcb || "NO ENCONTRADA"}`);
+    reporte.push(`✓ Versión del código: ${VERSION_CODIGO} | Horario en correos: ${CONFIG.HORARIO_ENTREGA}`);
   } catch (e) {
     reporte.push(`✕ Error en hoja: ${e.message}`);
   }
@@ -1516,6 +1528,16 @@ function corregirFilasDesfasadasExistentes() {
   const lastRow = sh.getLastRow();
   if (lastRow < 2) {
     SpreadsheetApp.getUi().alert("No hay filas de datos para verificar.");
+    return;
+  }
+
+  // Esta corrección asume que "Ticket" está en la columna 25 (Y). Si se agregaron preguntas
+  // al formulario y las columnas se movieron, NO se ejecuta para no sobrescribir respuestas.
+  if (norm(sh.getRange(1, 25).getValue()) !== "ticket") {
+    const aviso = 'La columna Y (25) ya no es "Ticket" (probablemente se agregó una pregunta al formulario). ' +
+      "No se hizo ningún cambio para evitar sobrescribir datos.";
+    Logger.log(aviso);
+    try { SpreadsheetApp.getUi().alert("⚠️ " + aviso); } catch (e) { }
     return;
   }
 
