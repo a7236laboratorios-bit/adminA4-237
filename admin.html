@@ -815,7 +815,10 @@
     // URL fija y predeterminada del backend Web App de Apps Script (ejecutable /exec):
     const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx9SkchCZTvHi63zTHoCmBcVnClBtlZl7Z8Fgskr115dDh1sd6a8_PhXy0tRdeEC7k4cg/exec";
 
+    let apiUrlManual = "";
+
     function obtenerApiUrl() {
+      if (apiUrlManual) return apiUrlManual;
       try {
         const params = new URLSearchParams(window.location.search);
         if (params.has("api")) {
@@ -827,14 +830,8 @@
         }
       } catch (e) { }
 
-      // 1. Usar directamente la URL fija del código si está presente
+      // 1. La URL fija del código tiene prioridad sobre una URL vieja guardada en el navegador
       if (DEFAULT_API_URL && DEFAULT_API_URL.trim()) {
-        try {
-          const guardada = localStorage.getItem("LAB_API_URL");
-          if (guardada && guardada.trim() && guardada.trim().startsWith("https://script.google.com/macros/s/")) {
-            return guardada.trim();
-          }
-        } catch (e) { }
         return DEFAULT_API_URL.trim();
       }
 
@@ -857,8 +854,8 @@
       } catch (e) { }
       const nueva = prompt("Pega la URL de tu Web App de Google Apps Script (terminada en /exec):", actual);
       if (nueva !== null && nueva.trim() !== "") {
-        try { localStorage.setItem("LAB_API_URL", nueva.trim()); } catch (e) { }
-        mostrarToast("URL de Apps Script actualizada.", false);
+        apiUrlManual = nueva.trim(); // Solo para esta sesión; la URL fija del código manda al recargar
+        mostrarToast("URL de Apps Script actualizada para esta sesión.", false);
         if (adminToken) cargarTodo();
       }
     }

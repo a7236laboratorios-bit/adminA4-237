@@ -304,7 +304,7 @@
     // CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS
     // ==========================================
     // URL fija y predeterminada del backend Web App de Apps Script (ejecutable /exec):
-    const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzfhE6gWlGamC3HIkApZ5bJNXcfOZKgF5fJ8jag2e2y0HlkHcCBs0C1x1kothcm2EH96A/exec";
+    const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx9SkchCZTvHi63zTHoCmBcVnClBtlZl7Z8Fgskr115dDh1sd6a8_PhXy0tRdeEC7k4cg/exec";
 
     function obtenerApiUrl() {
       try {
@@ -318,14 +318,8 @@
         }
       } catch (e) { }
 
-      // 1. Usar directamente la URL fija del código si está presente
+      // 1. La URL fija del código tiene prioridad sobre una URL vieja guardada en el navegador
       if (DEFAULT_API_URL && DEFAULT_API_URL.trim()) {
-        try {
-          const guardada = localStorage.getItem("LAB_API_URL");
-          if (guardada && guardada.trim() && guardada.trim().startsWith("https://script.google.com/macros/s/")) {
-            return guardada.trim();
-          }
-        } catch (e) { }
         return DEFAULT_API_URL.trim();
       }
 
