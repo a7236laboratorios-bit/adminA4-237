@@ -975,6 +975,7 @@ async function init() {
   catch (e) {
     $('#arranque').innerHTML = '<div class="card" style="max-width:640px;margin:20px auto;text-align:left"><h2>No se pudo iniciar</h2>' + alerta(limpio(e)) +
       '<p class="muted">Abre la hoja de Inventario y usa 📦 Almacén › Instalar / reparar plantilla. Para conectar esta página usa 📦 Almacén › Abrir la aplicación (enlaces).</p>' +
+      (apiUrl() ? '<p class="muted">Prueba: abre <a target="_blank" href="' + esc(apiUrl() + '?fn=getAppData') + '">este enlace del servidor</a>. Debe mostrar texto que empieza con <code>{"ok":true</code>. Si pide iniciar sesión o muestra otra página, revisa la implementación de Apps Script.</p>' : '') +
       '<p><button class="btn" onclick="conectar()">Conectar con otra URL /exec…</button></p></div>';
     return;
   }
