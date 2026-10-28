@@ -8,6 +8,13 @@ Sistema automatizado basado en **Google Apps Script**, **Google Sheets**, **Goog
 
 ---
 
+## 📦 Inventario y Préstamos (sistema aparte)
+
+`inventario.html` es el sistema de préstamo de material con escáner/QR. Usa **su propia hoja y su propio Apps Script** (carpeta `inventario/`), así que no se mezcla con Prototipado.
+🔗 `https://a7236laboratorios-bit.github.io/adminA4-237/inventario.html` — instalación en [`inventario/INSTALACION.md`](inventario/INSTALACION.md).
+
+---
+
 ## 📁 Estructura del Proyecto para GitHub
 
 ```text
