@@ -12,7 +12,7 @@
  * ════════════════════════════════════════════════════════════════════
  */
 
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 
 const HOJAS = {
   CONFIG: 'Configuración',
@@ -26,10 +26,10 @@ const HOJAS = {
  *  reordenarlas o agregar columnas propias sin romper nada. */
 const COLUMNAS = {
   [HOJAS.CONFIG]: ['Clave', 'Valor', 'Descripción'],
-  [HOJAS.MATERIALES]: ['ID', 'Nombre', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas'],
+  [HOJAS.MATERIALES]: ['ID', 'Nombre', 'No. de serie', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas'],
   [HOJAS.USUARIOS]: ['ID', 'Nombre', 'Correo', 'Área', 'Estatus', 'Notas', 'Reglamento'],
   [HOJAS.LABS]: ['Nombre', 'PIN', 'Correo', 'Activo', 'Notas'],
-  [HOJAS.HISTORIAL]: ['ID Movimiento', 'Fecha préstamo', 'ID Material', 'Material', 'ID Usuario', 'Usuario', 'Correo', 'Área',
+  [HOJAS.HISTORIAL]: ['ID Movimiento', 'Fecha préstamo', 'ID Material', 'Material', 'No. de serie', 'ID Usuario', 'Usuario', 'Correo', 'Área',
     'Entregó', 'Cantidad', 'Fecha límite', 'Cantidad devuelta', 'Estado', 'Fecha devolución', 'Recibió', 'Notas']
 };
 
@@ -226,14 +226,15 @@ function identificarParaDevolucion(codigo) {
   if (usuarios[id] || md.activos.some(a => id_(a.usuarioId) === id)) {
     return { tipo: 'usuario', usuario: publicoUsuario_(evaluarUsuario_(id, cfg, md, usuarios), cfg) };
   }
-  const conMat = md.activos.filter(a => id_(a.materialId) === id);
+  const idMat = md.porSerie[id] ? id_(md.porSerie[id].id) : id;
+  const conMat = md.activos.filter(a => id_(a.materialId) === idMat);
   if (conMat.length) {
     const ids = [];
     conMat.forEach(a => { if (ids.indexOf(id_(a.usuarioId)) < 0) ids.push(id_(a.usuarioId)); });
     if (ids.length > 1) throw new Error('"' + conMat[0].material + '" lo tienen varias personas. Escanea tu credencial.');
     return { tipo: 'material', materialId: conMat[0].materialId, usuario: publicoUsuario_(evaluarUsuario_(ids[0], cfg, md, usuarios), cfg) };
   }
-  if (md.porId[id]) throw new Error('"' + md.porId[id].nombre + '" no aparece como prestado.');
+  if (md.porId[idMat]) throw new Error('"' + md.porId[idMat].nombre + '" no aparece como prestado.');
   throw new Error('No encontramos ese código. Escanea tu credencial.');
 }
 
@@ -244,7 +245,7 @@ function publicoUsuario_(u, cfg) {
     correo: enmascarar_(u.correo), estatus: u.estatus, vencidos: u.vencidos,
     puedePrestar: u.puedePrestar, motivo: u.motivo, puedeRegistrarse: !u.encontrado && si_(cfg.AUTOREGISTRO),
     activos: u.activos.map(a => ({
-      idMov: a.idMov, materialId: a.materialId, material: a.material, cantidad: a.cantidad,
+      idMov: a.idMov, materialId: a.materialId, material: a.material, serie: a.serie, cantidad: a.cantidad,
       pendiente: a.pendiente, fecha: a.fecha, limite: a.limite, vencido: a.vencido, dias: a.dias
     }))
   };
@@ -372,6 +373,7 @@ function registrarPrestamo(auth, p) {
       put(H.fecha, ahora);
       put(H.mat, m.id);
       put(H.matNom, m.nombre);
+      put(H.serie, m.serie);
       put(H.usr, u.id);
       put(H.usrNom, nombreU);
       put(H.correo, correo);
@@ -417,7 +419,8 @@ function buscarParaDevolucion(auth, codigo) {
   if (usuarios[id] || md.activos.some(a => id_(a.usuarioId) === id)) {
     return { tipo: 'usuario', usuario: evaluarUsuario_(id, cfg, md, usuarios) };
   }
-  const conMat = md.activos.filter(a => id_(a.materialId) === id);
+  const idMat = md.porSerie[id] ? id_(md.porSerie[id].id) : id;
+  const conMat = md.activos.filter(a => id_(a.materialId) === idMat);
   if (conMat.length) {
     const ids = [];
     conMat.forEach(a => { if (ids.indexOf(id_(a.usuarioId)) < 0) ids.push(id_(a.usuarioId)); });
@@ -432,7 +435,7 @@ function buscarParaDevolucion(auth, codigo) {
       })
     };
   }
-  if (md.porId[id]) throw new Error('"' + md.porId[id].nombre + '" no está prestado en este momento.');
+  if (md.porId[idMat]) throw new Error('"' + md.porId[idMat].nombre + '" no está prestado en este momento.');
   throw new Error('No se encontró ningún usuario ni artículo prestado con el código "' + String(codigo).trim() + '".');
 }
 
@@ -554,7 +557,7 @@ function consultar(auth, texto) {
       if (norm_(u.nombre).indexOf(q) >= 0 || norm_(u.id).indexOf(q) >= 0) out.coincidencias.push({ tipo: 'Usuario', id: u.id, nombre: u.nombre, extra: u.area });
     });
     md.materiales.forEach(m => {
-      if (norm_(m.nombre).indexOf(q) >= 0 || norm_(m.id).indexOf(q) >= 0) out.coincidencias.push({ tipo: 'Material', id: m.id, nombre: m.nombre, extra: m.ubicacion });
+      if (norm_(m.nombre).indexOf(q) >= 0 || norm_(m.id).indexOf(q) >= 0 || (m.serie && norm_(m.serie).indexOf(q) >= 0)) out.coincidencias.push({ tipo: 'Material', id: m.id, nombre: m.nombre, extra: [m.serie ? 'S/N ' + m.serie : '', m.ubicacion].filter(String).join(' · ') });
     });
     out.coincidencias = out.coincidencias.slice(0, 40);
   }
@@ -587,7 +590,7 @@ function modelo_(cfg) {
   const tm = tabla_(HOJAS.MATERIALES);
   const M = {
     id: tm.c('ID'), nombre: tm.c('Nombre'), cat: tm.c('Categoría', true),
-    ubi: tm.c('Ubicación', true), total: tm.c('Cantidad total', true)
+    ubi: tm.c('Ubicación', true), total: tm.c('Cantidad total', true), serie: tm.c('No. de serie', true)
   };
   const materiales = [], porId = {}, duplicados = [];
   tm.rows.forEach((r, i) => {
@@ -600,6 +603,7 @@ function modelo_(cfg) {
       nombre: String(r[M.nombre]).trim() || String(r[M.id]).trim(),
       categoria: String(cel_(r, M.cat)).trim(),
       ubicacion: String(cel_(r, M.ubi)).trim(),
+      serie: String(cel_(r, M.serie)).trim(),
       total: Math.max(0, num_(cel_(r, M.total), 1)),
       prestado: 0
     };
@@ -623,7 +627,7 @@ function modelo_(cfg) {
     const mov = {
       fila: i + 2, idMov: idMov,
       fecha: fecha_(r[H.fecha]),
-      materialId: String(r[H.mat]).trim(), material: String(r[H.matNom]).trim(),
+      materialId: String(r[H.mat]).trim(), material: String(r[H.matNom]).trim(), serie: String(cel_(r, H.serie)).trim(),
       usuarioId: String(r[H.usr]).trim(), usuario: String(cel_(r, H.usrNom)).trim(),
       correo: String(cel_(r, H.correo)).trim(), area: String(cel_(r, H.area)).trim(),
       entrego: String(cel_(r, H.entrego)).trim(),
@@ -639,16 +643,21 @@ function modelo_(cfg) {
       if (m) m.prestado += pend;
     }
   });
+  // Permite escanear el número de serie en lugar del ID (si es único y no choca con un ID)
+  const porSerie = {}, serieRep = {};
+  materiales.forEach(m => { const k = id_(m.serie); if (!k) return; if (porSerie[k]) serieRep[k] = 1; porSerie[k] = m; });
+  Object.keys(serieRep).forEach(k => { delete porSerie[k]; });
+  Object.keys(porSerie).forEach(k => { if (porId[k]) delete porSerie[k]; });
   materiales.forEach(m => {
     m.disponible = Math.max(m.total - m.prestado, 0);
     m.estatus = estatusMat_(m);
   });
-  return { cfg, tm, th, H, materiales, porId, duplicados, movs, activos: movs.filter(x => x.activo) };
+  return { cfg, tm, th, H, materiales, porId, porSerie, duplicados, movs, activos: movs.filter(x => x.activo) };
 }
 
 function colsHist_(th) {
   return {
-    idMov: th.c('ID Movimiento'), fecha: th.c('Fecha préstamo'), mat: th.c('ID Material'), matNom: th.c('Material'),
+    idMov: th.c('ID Movimiento'), fecha: th.c('Fecha préstamo'), mat: th.c('ID Material'), matNom: th.c('Material'), serie: th.c('No. de serie', true),
     usr: th.c('ID Usuario'), usrNom: th.c('Usuario', true), correo: th.c('Correo', true), area: th.c('Área', true),
     entrego: th.c('Entregó', true), cant: th.c('Cantidad'), limite: th.c('Fecha límite', true),
     dev: th.c('Cantidad devuelta'), estado: th.c('Estado'), fechaDev: th.c('Fecha devolución'),
@@ -796,14 +805,14 @@ function resumen_(md) {
 
 function matPub_(m) {
   return {
-    id: m.id, nombre: m.nombre, categoria: m.categoria, ubicacion: m.ubicacion,
+    id: m.id, nombre: m.nombre, serie: m.serie, categoria: m.categoria, ubicacion: m.ubicacion,
     total: m.total, prestado: m.prestado, disponible: m.disponible, estatus: m.estatus
   };
 }
 
 function movPub_(a) {
   return {
-    idMov: a.idMov, materialId: a.materialId, material: a.material,
+    idMov: a.idMov, materialId: a.materialId, material: a.material, serie: a.serie,
     usuarioId: a.usuarioId, usuario: a.usuario, area: a.area, entrego: a.entrego,
     cantidad: a.cantidad, devuelta: a.devuelta, pendiente: a.pendiente, estado: a.estado,
     fecha: fmt_(a.fecha), limite: fmt_(a.limite, 'dd/MM/yyyy'), vencido: a.vencido,
@@ -1088,7 +1097,9 @@ function darFormato_(sh, nombre) {
       break;
 
     case HOJAS.MATERIALES: {
-      anchos([110, 240, 130, 130, 110, 100, 120, 200]);
+      anchos([110, 240, 150, 130, 130, 110, 100, 120, 200]);
+      rango('No. de serie').setNumberFormat('@');
+      sh.getRange(1, col('No. de serie')).setNote('Número de serie del fabricante. Opcional; si tiene código de barras también se puede escanear.');
       rango('ID').setNumberFormat('@');
       rango('Cantidad total').setNumberFormat('0');
       rango('Disponible').setBackground('#f3f4f6');
@@ -1124,8 +1135,8 @@ function darFormato_(sh, nombre) {
       break;
 
     case HOJAS.HISTORIAL: {
-      anchos([100, 130, 100, 200, 110, 190, 200, 140, 150, 75, 100, 80, 95, 130, 150, 200]);
-      ['ID Material', 'ID Usuario'].forEach(n => rango(n).setNumberFormat('@'));
+      anchos([100, 130, 100, 200, 140, 110, 190, 200, 140, 150, 75, 100, 80, 95, 130, 150, 200]);
+      ['ID Material', 'No. de serie', 'ID Usuario'].forEach(n => rango(n).setNumberFormat('@'));
       ['Fecha préstamo', 'Fecha devolución'].forEach(n => rango(n).setNumberFormat('dd/MM/yyyy HH:mm'));
       rango('Fecha límite').setNumberFormat('dd/MM/yyyy');
       lista('Estado', ['Prestado', 'Parcial', 'Devuelto', 'Cancelado']);
@@ -1151,14 +1162,14 @@ function datosEjemplo_(sh, nombre) {
   let filas = [];
   if (nombre === HOJAS.MATERIALES) {
     filas = [
-      ['MAT001', 'Multímetro digital', 'Electrónica', 'Estante A1', 5, '', '', E],
-      ['MAT002', 'Osciloscopio 2 canales', 'Electrónica', 'Mesa 2', 2, '', '', E],
-      ['MAT003', 'Cautín 60 W', 'Electrónica', 'Estante A2', 8, '', '', E],
-      ['MAT004', 'Vernier digital', 'Metrología', 'Cajón B1', 6, '', '', E],
-      ['MAT005', 'Taladro inalámbrico', 'Herramienta', 'Gabinete C', 1, '', '', E],
-      ['MAT006', 'Kit Arduino UNO', 'Electrónica', 'Estante A3', 10, '', '', E]
+      ['MAT001', 'Multímetro digital', '', 'Electrónica', 'Estante A1', 5, '', '', E],
+      ['MAT002', 'Osciloscopio 2 canales', 'TDS2002C0042', 'Electrónica', 'Mesa 2', 1, '', '', E],
+      ['MAT003', 'Cautín 60 W', '', 'Electrónica', 'Estante A2', 8, '', '', E],
+      ['MAT004', 'Vernier digital', '', 'Metrología', 'Cajón B1', 6, '', '', E],
+      ['MAT005', 'Taladro inalámbrico', 'DCD7713305', 'Herramienta', 'Gabinete C', 1, '', '', E],
+      ['MAT006', 'Kit Arduino UNO', '', 'Electrónica', 'Estante A3', 10, '', '', E]
     ];
-    for (let i = 1; i <= 12; i++) filas.push(['L' + i, 'Locker ' + i, 'Locker', 'Pasillo', 1, '', '', E]);
+    for (let i = 1; i <= 12; i++) filas.push(['L' + i, 'Locker ' + i, '', 'Locker', 'Pasillo', 1, '', '', E]);
   } else if (nombre === HOJAS.USUARIOS) {
     filas = [
       ['A00000001', 'Ana López Ruiz', 'ana.lopez@example.com', 'Mecatrónica', 'Activo', E],

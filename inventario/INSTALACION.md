@@ -46,7 +46,8 @@ Por defecto `AUTORIZAR_PRESTAMO = No` y `AUTORIZAR_DEVOLUCION = Sí`. Puedes cam
 2. En la hoja: **📦 Almacén › Instalar / reparar plantilla**. Esto agrega las claves nuevas (`AUTOREGISTRO`, `AUTORIZAR_PRESTAMO`, `AUTORIZAR_DEVOLUCION`, `MINUTOS_SESION`) sin borrar datos. Las claves viejas `REQUIERE_PIN` y `REGISTRO_LIBRE` ya no se usan; puedes borrarlas.
 3. **Implementar › Administrar implementaciones › ✏️ › Versión: Nueva versión**. La URL `/exec` no cambia.
 4. Revisa que **cada laboratorista tenga una contraseña distinta**.
-5. Si ya habías instalado la v2.0, en Configuración cambia `AUTORIZAR_PRESTAMO` a **No**, porque *Instalar / reparar* no sobrescribe valores existentes. La columna `Reglamento` de Usuarios y las claves `REGLAMENTO_TEXTO` y `REGLAMENTO_URL` se agregan solas.
+5. La columna **No. de serie** se agrega sola al final de *Materiales* y de *Historial* (puedes moverla a donde quieras; se busca por nombre).
+6. Si ya habías instalado la v2.0, en Configuración cambia `AUTORIZAR_PRESTAMO` a **No**, porque *Instalar / reparar* no sobrescribe valores existentes. La columna `Reglamento` de Usuarios y las claves `REGLAMENTO_TEXTO` y `REGLAMENTO_URL` se agregan solas.
 
 `inventario.html` (GitHub Pages) avisa con un letrero rojo si el servidor sigue en la v1.
 
@@ -127,7 +128,7 @@ Los enlaces de la versión anterior (`?prestamo`, `?devolucion`, `?Visualizacion
 | Hoja | Qué captura el cliente | Notas |
 |---|---|---|
 | **Configuración** | Nombre, color, logo, días de préstamo, correos… | Ver tabla abajo. |
-| **Materiales** | `ID`, `Nombre`, `Categoría`, `Ubicación`, `Cantidad total` | `Disponible` y `Estatus` los calcula el sistema. `Cantidad total` vacía cuenta como 1. |
+| **Materiales** | `ID`, `Nombre`, `No. de serie`, `Categoría`, `Ubicación`, `Cantidad total` | `Disponible` y `Estatus` los calcula el sistema. `Cantidad total` vacía cuenta como 1. **No. de serie** es opcional: se copia al Historial en cada préstamo, aparece en pantallas y etiquetas, y si el equipo trae su código de barras de serie también se puede escanear en lugar del ID. Para equipos con número de serie, registra **una fila por pieza** con `Cantidad total` = 1. |
 | **Usuarios** | `ID` (lo que trae el código de la credencial), `Nombre`, `Correo`, `Área`, `Estatus` | `Estatus = Bloqueado` impide prestarle. En `Notas` se puede escribir el motivo. |
 | **Laboratoristas** | `Nombre`, `PIN`, `Activo` | Quien entrega o recibe queda registrado en cada movimiento. |
 | **Historial** | Nada: lo escribe la app | Para anular un registro equivocado, escribe **Cancelado** en `Estado`. |

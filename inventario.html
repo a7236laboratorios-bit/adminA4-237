@@ -418,6 +418,7 @@ const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const idn = s => String(s == null ? '' : s).trim().toUpperCase();
 const js = s => esc(JSON.stringify(String(s)));
+const sn = s => s ? ' · S/N ' + esc(s) : '';
 
 async function api(fn, ...args) {
   if (ES_GAS) {
@@ -588,6 +589,10 @@ function setCatalogo(lista) {
   S.data.materiales = lista;
   S.cat = {};
   lista.forEach(m => { S.cat[idn(m.id)] = m; });
+  // también por número de serie (si es único y no choca con un ID)
+  const vistos = {};
+  lista.forEach(m => { const k = idn(m.serie); if (k) vistos[k] = (vistos[k] || 0) + 1; });
+  lista.forEach(m => { const k = idn(m.serie); if (k && vistos[k] === 1 && !S.cat[k]) S.cat[k] = m; });
 }
 function estadoBadge(m) {
   if (m.vencido) return '<span class="badge b-err">Vencido</span>';
@@ -771,7 +776,7 @@ function pdPintar(resaltar) {
     t.innerHTML = '<tr><th>Equipo</th><th class="n">Disponibles</th><th class="n">Cantidad</th><th></th></tr>' +
       P.items.map((i, k) => {
         const m = S.cat[idn(i.id)] || { disponible: 0 };
-        return '<tr' + (idn(i.id) === idn(resaltar) ? ' class="hl"' : '') + '><td><b>' + esc(i.nombre) + '</b><div class="muted mono" style="font-size:12px">' + esc(i.id) + '</div></td>' +
+        return '<tr' + (idn(i.id) === idn(resaltar) ? ' class="hl"' : '') + '><td><b>' + esc(i.nombre) + '</b><div class="muted mono" style="font-size:12px">' + esc(i.id) + sn(m.serie) + '</div></td>' +
           '<td class="n">' + m.disponible + '</td>' +
           '<td class="n"><input class="qty" type="number" min="1" max="' + m.disponible + '" value="' + i.cantidad + '" onchange="pdCant(' + k + ',this)"></td>' +
           '<td class="n"><button class="btn sm dan" title="Quitar" onclick="pdQuitar(' + k + ')">✕</button></td></tr>';
@@ -858,6 +863,8 @@ function dvArticulo(code) {
   if (dvMarcar(code)) beep(true);
 }
 function dvMarcar(code, silencioso) {
+  const mm = S.cat[idn(code)];
+  if (mm) code = mm.id;   // permite escanear el número de serie
   const l = D.lin.find(x => idn(x.materialId) === idn(code) && x.devolver < x.pendiente);
   if (!l) {
     if (!silencioso) {
@@ -877,7 +884,7 @@ function dvPintar(resaltar) {
   if (!D.u) t.innerHTML = '<tr><td class="empty">Primero escanea tu credencial o un equipo.</td></tr>';
   else {
     t.innerHTML = '<tr><th>Equipo</th><th>Prestado</th><th class="n">Tienes</th><th class="n">Devuelves</th><th></th></tr>' +
-      D.lin.map((l, k) => '<tr' + (l.idMov === resaltar ? ' class="hl"' : '') + '><td><b>' + esc(l.material) + '</b><div class="muted mono" style="font-size:12px">' + esc(l.materialId) + '</div></td>' +
+      D.lin.map((l, k) => '<tr' + (l.idMov === resaltar ? ' class="hl"' : '') + '><td><b>' + esc(l.material) + '</b><div class="muted mono" style="font-size:12px">' + esc(l.materialId) + sn(l.serie) + '</div></td>' +
         '<td style="font-size:13px">' + esc(l.fecha) + '<div>' + (l.limite ? (l.vencido ? '<span class="badge b-err">Venció ' + esc(l.limite) + '</span>' : '<span class="muted">Límite ' + esc(l.limite) + '</span>') : '') + '</div></td>' +
         '<td class="n">' + l.pendiente + '</td>' +
         '<td class="n"><input class="qty" type="number" min="0" max="' + l.pendiente + '" value="' + l.devolver + '" onchange="dvCant(' + k + ',this)"' + (l.devolver ? ' style="border-color:var(--ok);background:var(--okbg);font-weight:700"' : '') + '></td>' +
@@ -908,7 +915,7 @@ async function dvTerminar() {
   const u = D.u, items = marcadas.map(l => ({ idMov: l.idMov, cantidad: l.devolver })), notas = $('#dv-notas').value;
   const quedan = D.lin.reduce((s, l) => s + l.pendiente - l.devolver, 0);
   const resumen = '<div class="resumen-aut"><b>' + esc(u.nombre) + '</b> <span class="muted mono">' + esc(u.id) + '</span> devuelve:<ul>' +
-    marcadas.map(l => '<li>' + esc(l.material) + ' <b>×' + l.devolver + '</b></li>').join('') + '</ul>' +
+    marcadas.map(l => '<li>' + esc(l.material) + (l.serie ? ' <span class="muted mono">S/N ' + esc(l.serie) + '</span>' : '') + ' <b>×' + l.devolver + '</b></li>').join('') + '</ul>' +
     (quedan ? '<div class="muted" style="margin-top:6px">Se queda con ' + quedan + ' pieza(s) pendiente(s).</div>' : '') +
     '<div class="muted" style="margin-top:6px">Revisa físicamente que el material esté completo antes de autorizar.</div></div>';
   try {
@@ -1005,7 +1012,7 @@ async function csBuscar(q) {
         '<div class="chips"><span class="badge b-inf">' + u.activos.length + ' préstamo(s) activo(s)</span>' + (u.vencidos ? '<span class="badge b-err">' + u.vencidos + ' vencido(s)</span>' : '') + '</div></div>';
     } else if (r.material) {
       const m = r.material;
-      h += '<div class="card"><h2>' + esc(m.nombre) + ' <span class="muted mono" style="font-size:14px">' + esc(m.id) + '</span> ' + (m.estatus ? estatusBadge(m.estatus) : '') + '</h2>' +
+      h += '<div class="card"><h2>' + esc(m.nombre) + ' <span class="muted mono" style="font-size:14px">' + esc(m.id) + sn(m.serie) + '</span> ' + (m.estatus ? estatusBadge(m.estatus) : '') + '</h2>' +
         (m.total !== undefined ? '<div class="muted">' + esc([m.categoria, m.ubicacion].filter(Boolean).join(' · ')) + '</div><div class="chips"><span class="badge b-mut">Total ' + m.total + '</span><span class="badge b-ok">Disponibles ' + m.disponible + '</span><span class="badge b-err">Prestadas ' + m.prestado + '</span></div>' : '') + '</div>';
     }
     if (r.usuario || r.material) {
@@ -1029,14 +1036,14 @@ async function csLista(venc) {
 }
 function csInventario() {
   const l = S.data.materiales;
-  $('#cs-res').innerHTML = '<div class="card"><h2>Inventario (' + l.length + ')</h2><div class="tw"><table class="t"><tr><th>ID</th><th>Nombre</th><th>Categoría</th><th>Ubicación</th><th class="n">Total</th><th class="n">Disp.</th><th>Estatus</th></tr>' +
-    l.map(m => '<tr><td class="mono"><a onclick="csBuscar(' + js(m.id) + ')">' + esc(m.id) + '</a></td><td>' + esc(m.nombre) + '</td><td>' + esc(m.categoria) + '</td><td>' + esc(m.ubicacion) + '</td><td class="n">' + m.total + '</td><td class="n">' + m.disponible + '</td><td>' + estatusBadge(m.estatus) + '</td></tr>').join('') +
+  $('#cs-res').innerHTML = '<div class="card"><h2>Inventario (' + l.length + ')</h2><div class="tw"><table class="t"><tr><th>ID</th><th>Nombre</th><th>No. de serie</th><th>Categoría</th><th>Ubicación</th><th class="n">Total</th><th class="n">Disp.</th><th>Estatus</th></tr>' +
+    l.map(m => '<tr><td class="mono"><a onclick="csBuscar(' + js(m.id) + ')">' + esc(m.id) + '</a></td><td>' + esc(m.nombre) + '</td><td class="mono">' + esc(m.serie || '—') + '</td><td>' + esc(m.categoria) + '</td><td>' + esc(m.ubicacion) + '</td><td class="n">' + m.total + '</td><td class="n">' + m.disponible + '</td><td>' + estatusBadge(m.estatus) + '</td></tr>').join('') +
     '</table></div></div>';
 }
 function tablaMovs(l, activos) {
   return '<div class="tw"><table class="t"><tr><th>Fecha</th><th>Material</th><th>Usuario</th><th class="n">Cant.</th>' + (activos ? '<th class="n">Pend.</th><th>Límite</th>' : '<th class="n">Dev.</th><th>Estado</th>') + '<th>Autorizó</th>' + (activos ? '<th class="n">Días</th>' : '<th>Devolución</th>') + '</tr>' +
     l.map(m => '<tr><td style="white-space:nowrap">' + esc(m.fecha) + '</td>' +
-      '<td><a onclick="irConsulta(' + js(m.materialId) + ')">' + esc(m.material) + '</a><div class="muted mono" style="font-size:12px">' + esc(m.materialId) + '</div></td>' +
+      '<td><a onclick="irConsulta(' + js(m.materialId) + ')">' + esc(m.material) + '</a><div class="muted mono" style="font-size:12px">' + esc(m.materialId) + sn(m.serie) + '</div></td>' +
       '<td><a onclick="irConsulta(' + js(m.usuarioId) + ')">' + esc(m.usuario || m.usuarioId) + '</a><div class="muted mono" style="font-size:12px">' + esc(m.usuarioId) + '</div></td>' +
       '<td class="n">' + m.cantidad + '</td>' +
       (activos
@@ -1105,7 +1112,7 @@ async function etCargar() {
   const tipo = $('#et-tipo').value;
   $('#et-cat-w').style.display = tipo === 'mat' ? '' : 'none';
   if (tipo === 'mat') {
-    ET = S.data.materiales.map(m => ({ id: m.id, nombre: m.nombre, extra: m.categoria, sel: true }));
+    ET = S.data.materiales.map(m => ({ id: m.id, nombre: m.nombre, serie: m.serie, extra: m.categoria, sel: true }));
     const cats = Array.from(new Set(S.data.materiales.map(m => m.categoria).filter(Boolean))).sort();
     $('#et-cat').innerHTML = '<option value="">Todas</option>' + cats.map(c => '<option>' + esc(c) + '</option>').join('');
   } else if (tipo === 'usr') {
@@ -1122,12 +1129,12 @@ async function etCargar() {
 }
 function etVisibles() {
   const q = idn($('#et-q').value), cat = $('#et-cat').value, tipo = $('#et-tipo').value;
-  return ET.filter(e => (!q || idn(e.id).indexOf(q) >= 0 || idn(e.nombre).indexOf(q) >= 0) && (tipo !== 'mat' || !cat || e.extra === cat));
+  return ET.filter(e => (!q || idn(e.id).indexOf(q) >= 0 || idn(e.nombre).indexOf(q) >= 0 || idn(e.serie).indexOf(q) >= 0) && (tipo !== 'mat' || !cat || e.extra === cat));
 }
 function etPintar() {
   const v = etVisibles();
   $('#et-tabla').innerHTML = '<tr><th style="width:40px"><input type="checkbox" style="width:auto" ' + (v.length && v.every(e => e.sel) ? 'checked' : '') + ' onchange="etTodos(this.checked)"></th><th>ID</th><th>Nombre</th><th></th></tr>' +
-    (v.length ? v.map(e => '<tr><td><input type="checkbox" style="width:auto" ' + (e.sel ? 'checked' : '') + ' onchange="etSel(' + ET.indexOf(e) + ',this.checked)"></td><td class="mono">' + esc(e.id) + '</td><td>' + esc(e.nombre) + '</td><td class="muted">' + esc(e.extra) + '</td></tr>').join('')
+    (v.length ? v.map(e => '<tr><td><input type="checkbox" style="width:auto" ' + (e.sel ? 'checked' : '') + ' onchange="etSel(' + ET.indexOf(e) + ',this.checked)"></td><td class="mono">' + esc(e.id) + '</td><td>' + esc(e.nombre) + (e.serie ? ' <span class="muted mono">S/N ' + esc(e.serie) + '</span>' : '') + '</td><td class="muted">' + esc(e.extra) + '</td></tr>').join('')
       : '<tr><td colspan="4" class="empty">Sin elementos.</td></tr>');
   $('#et-sel').textContent = v.filter(e => e.sel).length + ' seleccionada(s)';
 }
@@ -1147,7 +1154,8 @@ async function etGenerar() {
     const cmd = e.id.indexOf('CMD') === 0;
     const tag = '<div class="label" style="width:' + (mm + 4) + 'mm"><div class="qr" style="width:' + mm + 'mm;height:' + mm + 'mm">' + svg + '</div>' +
       '<div class="lid" style="font-size:' + fs + 'pt">' + esc(cmd ? e.nombre : e.id) + '</div>' +
-      (nom && !cmd ? '<div class="lnm" style="font-size:' + Math.max(5, fs - 2) + 'pt">' + esc(e.nombre) + '</div>' : '') + '</div>';
+      (nom && !cmd ? '<div class="lnm" style="font-size:' + Math.max(5, fs - 2) + 'pt">' + esc(e.nombre) + '</div>' : '') +
+      (nom && e.serie ? '<div class="lnm mono" style="font-size:' + Math.max(5, fs - 3) + 'pt">S/N ' + esc(e.serie) + '</div>' : '') + '</div>';
     for (let i = 0; i < cop; i++) html.push(tag);
   });
   $('#print-area').innerHTML = html.join('');
