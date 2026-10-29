@@ -12,7 +12,7 @@
  * ════════════════════════════════════════════════════════════════════
  */
 
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 
 const HOJAS = {
   CONFIG: 'Configuración',
@@ -27,7 +27,7 @@ const HOJAS = {
 const COLUMNAS = {
   [HOJAS.CONFIG]: ['Clave', 'Valor', 'Descripción'],
   [HOJAS.MATERIALES]: ['ID', 'Nombre', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas'],
-  [HOJAS.USUARIOS]: ['ID', 'Nombre', 'Correo', 'Área', 'Estatus', 'Notas'],
+  [HOJAS.USUARIOS]: ['ID', 'Nombre', 'Correo', 'Área', 'Estatus', 'Notas', 'Reglamento'],
   [HOJAS.LABS]: ['Nombre', 'PIN', 'Correo', 'Activo', 'Notas'],
   [HOJAS.HISTORIAL]: ['ID Movimiento', 'Fecha préstamo', 'ID Material', 'Material', 'ID Usuario', 'Usuario', 'Correo', 'Área',
     'Entregó', 'Cantidad', 'Fecha límite', 'Cantidad devuelta', 'Estado', 'Fecha devolución', 'Recibió', 'Notas']
@@ -44,7 +44,9 @@ const CONFIG_DEFAULT = [
   ['DIAS_PRESTAMO', '7', 'Días para devolver. 0 = el mismo día. Vacío = sin fecha límite.'],
   ['BLOQUEAR_CON_VENCIDOS', 'Sí', 'Sí / No. No prestar a quien tenga material vencido.'],
   ['AUTOREGISTRO', 'Sí', 'Sí / No. Si la credencial no está en Usuarios, la persona captura su nombre y correo y queda registrada.'],
-  ['AUTORIZAR_PRESTAMO', 'Sí', 'Sí / No. El laboratorista confirma cada préstamo con su contraseña.'],
+  ['AUTORIZAR_PRESTAMO', 'No', 'Sí / No. El laboratorista confirma cada préstamo con su contraseña (normalmente No: solo se revisa al devolver).'],
+  ['REGLAMENTO_TEXTO', 'Me comprometo a cumplir el reglamento del laboratorio y a usar bata todo el tiempo que esté en el espacio.', 'Compromiso que el usuario acepta al registrarse.'],
+  ['REGLAMENTO_URL', '', 'Opcional. Enlace (https) al reglamento completo; aparece junto a la casilla.'],
   ['AUTORIZAR_DEVOLUCION', 'Sí', 'Sí / No. El laboratorista confirma cada devolución con su contraseña.'],
   ['MINUTOS_SESION', '10', 'Minutos sin actividad para cerrar la sesión del laboratorista en la app.'],
   ['CATEGORIA_LOCKER', 'Locker', 'Los materiales con esta categoría aparecen en el mapa de lockers.'],
@@ -147,6 +149,8 @@ function getAppData() {
       logo: /^https:\/\//i.test(logo) ? logo : '',
       autoregistro: si_(cfg.AUTOREGISTRO),
       autorizarPrestamo: si_(cfg.AUTORIZAR_PRESTAMO),
+      reglamentoTexto: String(cfg.REGLAMENTO_TEXTO || '').trim(),
+      reglamentoUrl: /^https:\/\//i.test(String(cfg.REGLAMENTO_URL || '').trim()) ? String(cfg.REGLAMENTO_URL).trim() : '',
       autorizarDevolucion: si_(cfg.AUTORIZAR_DEVOLUCION),
       dominioCorreo: dominio_(cfg),
       minutosSesion: Math.max(1, Math.min(240, num_(cfg.MINUTOS_SESION, 10))),
@@ -190,10 +194,12 @@ function registrarUsuario(d) {
   const id = String(d.id || '').trim();
   const nombre = String(d.nombre || '').replace(/\s+/g, ' ').trim();
   const correo = String(d.correo || '').trim().toLowerCase();
-  const area = String(d.area || '').trim().slice(0, 80);
+  const area = String(d.area || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   if (!/^[A-Za-z0-9._-]{3,40}$/.test(id)) throw new Error('El ID de la credencial no es válido.');
   if (nombre.length < 5 || nombre.split(' ').length < 2 || nombre.length > 120) throw new Error('Escribe tu nombre completo (nombre y apellidos).');
   if (!emailValido_(correo)) throw new Error('Escribe un correo válido.');
+  if (area.length < 2) throw new Error('Escribe tu carrera o área.');
+  if (d.acepta !== true) throw new Error('Debes aceptar el reglamento y el uso de bata para registrarte.');
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -203,6 +209,7 @@ function registrarUsuario(d) {
     const put = (col, v) => { const i = t.c(col, true); if (i >= 0) row[i] = v; };
     put('ID', id); put('Nombre', nombre); put('Correo', correo); put('Área', area);
     put('Estatus', 'Activo'); put('Notas', 'Autorregistro ' + fmt_(new Date()));
+    put('Reglamento', 'Aceptado ' + fmt_(new Date()));
     t.sh.getRange(t.sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
     SpreadsheetApp.flush();
   } finally {

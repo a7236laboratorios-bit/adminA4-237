@@ -12,19 +12,19 @@ Los dos viven en el mismo sitio (`https://a7236laboratorios-bit.github.io/adminA
 
 ## Cómo opera (v2 · autoservicio)
 
-El **usuario** hace su propio préstamo y su propia devolución en el kiosco. El **laboratorista** solo autoriza con su contraseña y administra lo demás.
+El **usuario** hace su propio préstamo y su propia devolución en el kiosco. El **laboratorista** solo autoriza las **devoluciones** con su contraseña (para revisar que el material regrese en buen estado) y administra lo demás.
 
 | Quién | Qué puede hacer |
 |---|---|
 | **Usuario** (sin sesión) | **📤 Pedir** y **📥 Devolver**. Nada más. |
-| **Laboratorista** (🔐 arriba a la derecha) | Autoriza cada préstamo o devolución con su contraseña. Además maneja **Panel, Lockers, Consulta, Usuarios** (editar, bloquear, dar de alta) y **Etiquetas**. |
+| **Laboratorista** (🔐 arriba a la derecha) | Autoriza cada devolución con su contraseña. Además maneja **Panel, Lockers, Consulta, Usuarios** (editar, bloquear, dar de alta) y **Etiquetas**. |
 
 **Pedir material**
 1. El usuario escanea su credencial.
-   - Si es su **primera vez**, captura su *nombre completo* y *correo*, y queda guardado en la hoja **Usuarios** (en Notas dice “Autorregistro + fecha”).
+   - Si es su **primera vez**, captura su *nombre completo*, *correo* y *carrera/área* (todo obligatorio) y marca la casilla de compromiso: *“Me comprometo a cumplir el reglamento del laboratorio y a usar bata todo el tiempo que esté en el espacio”*. Sin la casilla no puede registrarse. Queda guardado en **Usuarios**: en *Notas* dice “Autorregistro + fecha” y en *Reglamento* dice “Aceptado + fecha y hora”.
    - Si está **bloqueado** o tiene **material vencido**, no puede continuar y se le pide que acuda con el laboratorista.
 2. Escanea cada equipo que se lleva. Escanear el mismo equipo otra vez suma una pieza.
-3. Toca **Terminar** (o escanea la etiqueta *TERMINAR*, o presiona F9). Aparece el resumen y el **laboratorista escribe su contraseña** para autorizar.
+3. Toca **Registrar préstamo** (o escanea la etiqueta *TERMINAR*, o presiona F9). **No necesita autorización.**
 4. Sale la pantalla “¡Listo!” con la fecha límite, se envía el comprobante por correo y la pantalla queda limpia para el siguiente.
 
 **Devolver material**
@@ -39,13 +39,14 @@ El **usuario** hace su propio préstamo y su propia devolución en el kiosco. El
 - La sesión del laboratorista se cierra sola tras `MINUTOS_SESION` sin actividad.
 - En el kiosco el correo se muestra enmascarado (`pe•••@tec.mx`).
 
-Para usarlo sin autorización (100 % autoservicio), pon `AUTORIZAR_PRESTAMO` y/o `AUTORIZAR_DEVOLUCION` en **No**.
+Por defecto `AUTORIZAR_PRESTAMO = No` y `AUTORIZAR_DEVOLUCION = Sí`. Puedes cambiar cualquiera de las dos en Configuración.
 
 ### Actualizar de v1 a v2 (hoja ya instalada)
 1. En el proyecto de Apps Script **del Inventario**, reemplaza `Code.gs` y `App.html` con los de esta carpeta y guarda.
 2. En la hoja: **📦 Almacén › Instalar / reparar plantilla**. Esto agrega las claves nuevas (`AUTOREGISTRO`, `AUTORIZAR_PRESTAMO`, `AUTORIZAR_DEVOLUCION`, `MINUTOS_SESION`) sin borrar datos. Las claves viejas `REQUIERE_PIN` y `REGISTRO_LIBRE` ya no se usan; puedes borrarlas.
 3. **Implementar › Administrar implementaciones › ✏️ › Versión: Nueva versión**. La URL `/exec` no cambia.
 4. Revisa que **cada laboratorista tenga una contraseña distinta**.
+5. Si ya habías instalado la v2.0, en Configuración cambia `AUTORIZAR_PRESTAMO` a **No**, porque *Instalar / reparar* no sobrescribe valores existentes. La columna `Reglamento` de Usuarios y las claves `REGLAMENTO_TEXTO` y `REGLAMENTO_URL` se agregan solas.
 
 `inventario.html` (GitHub Pages) avisa con un letrero rojo si el servidor sigue en la v1.
 
@@ -145,7 +146,9 @@ Si alguien borra una columna, **📦 Almacén › Instalar / reparar plantilla**
 | `CORREO_ADMIN` | Recibe el resumen diario de vencidos y las respuestas a los correos. |
 | `BLOQUEAR_CON_VENCIDOS` | No presta a quien tenga material vencido. |
 | `AUTOREGISTRO` | Sí: una credencial nueva captura nombre y correo y queda en Usuarios. No: solo el laboratorista da de alta (menú Usuarios). |
-| `AUTORIZAR_PRESTAMO`, `AUTORIZAR_DEVOLUCION` | Sí: el laboratorista confirma con su contraseña. No: autoservicio puro (queda registrado como “Autoservicio”). |
+| `AUTORIZAR_PRESTAMO` (No), `AUTORIZAR_DEVOLUCION` (Sí) | Sí: el laboratorista confirma con su contraseña. No: autoservicio (queda registrado como “Autoservicio”). |
+| `REGLAMENTO_TEXTO` | Texto de la casilla obligatoria del registro (por defecto: reglamento + uso de bata). |
+| `REGLAMENTO_URL` | Opcional. Enlace al reglamento completo, aparece junto a la casilla. |
 | `MINUTOS_SESION` | Minutos sin actividad para cerrar el modo laboratorista (10 por defecto). |
 | `CATEGORIA_LOCKER`, `LOCKERS_POR_FILA` | Los materiales con esa categoría aparecen en el mapa. **📦 Almacén › Generar lockers** crea L1…Ln. |
 

@@ -102,6 +102,10 @@ table.t{width:100%;border-collapse:collapse}
 .reg{margin-top:14px;padding:16px;border-radius:12px;border:1.5px dashed color-mix(in srgb,var(--brand) 45%,#fff);background:var(--brand-l)}
 .reg h3{margin:0 0 4px;font-size:16px}
 .reg .g{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.acepta{display:flex;gap:10px;align-items:flex-start;margin-top:14px;padding:12px;border-radius:10px;background:#fff;border:1.5px solid var(--bd);cursor:pointer;font-size:14px;font-weight:600}
+.acepta input{width:20px;height:20px;flex:none;margin:1px 0 0;accent-color:var(--brand)}
+.acepta.falta{border-color:var(--err);background:var(--errbg)}
+.acepta a{color:var(--brand);font-weight:600;white-space:nowrap}
 .okscreen{text-align:center;padding:10px 0}
 .okscreen .chk{width:84px;height:84px;border-radius:50%;background:var(--ok);color:#fff;font-size:46px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
 .okscreen h2{justify-content:center;font-size:24px;margin-bottom:6px}
@@ -378,7 +382,7 @@ table.t{width:100%;border-collapse:collapse}
 // ════════ CONEXIÓN CON EL BACKEND (Apps Script) ════════
 // Dentro de Apps Script se usa google.script.run. En GitHub Pages se llama a la URL /exec:
 const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyzuxHpd_6lnEHfMeCHKvGx1THd7yKxsLAwR9O6XCk-x8HK6rArg8ZK-nwSAQvNpgfj/exec";
-const VERSION_MIN = 2;   // versión mínima de inventario/Code.gs que entiende esta página
+const VERSION_MIN = 2;   // (2.1 agrega reglamento obligatorio al registrarse)   // versión mínima de inventario/Code.gs que entiende esta página
 
 const ES_GAS = !!(window.google && google.script && google.script.run);
 const _qs = new URLSearchParams(location.search);
@@ -694,13 +698,17 @@ function pdMostrarUsuario(u) {
     box.innerHTML = '<div class="reg"><h3>👋 ¡Bienvenido! Es tu primera vez</h3><div class="muted" style="font-size:14px">Credencial <b class="mono">' + esc(u.id) + '</b>. Registra tus datos una sola vez.</div>' +
       '<div class="g"><div><label class="lb" for="rg-nombre">Nombre completo</label><input id="rg-nombre" autocomplete="off" placeholder="Nombre y apellidos"></div>' +
       '<div><label class="lb" for="rg-correo">Correo</label><input id="rg-correo" type="email" autocomplete="off" placeholder="tu@correo.com" value="' + esc(dom ? u.id.toLowerCase() + dom : '') + '"></div></div>' +
-      '<label class="lb" for="rg-area">Carrera / área (opcional)</label><input id="rg-area" autocomplete="off" placeholder="Ej. Mecatrónica">' +
+      '<label class="lb" for="rg-area">Carrera / área</label><input id="rg-area" autocomplete="off" placeholder="Ej. Mecatrónica">' +
+      '<label class="acepta" for="rg-acepta"><input type="checkbox" id="rg-acepta"><span>' + esc(S.data.config.reglamentoTexto || 'Me comprometo a cumplir el reglamento del laboratorio y a usar bata todo el tiempo que esté en el espacio.') +
+      (S.data.config.reglamentoUrl ? ' <a href="' + esc(S.data.config.reglamentoUrl) + '" target="_blank" rel="noopener">Leer reglamento</a>' : '') + '</span></label>' +
       '<div class="row" style="margin-top:14px"><span class="hint" style="margin:0">Aquí llegarán tus comprobantes y recordatorios.</span><span class="sp"></span><button class="btn pri" id="rg-btn" onclick="pdRegistrarme()">Registrarme y continuar</button></div></div>';
+    $('#rg-acepta').addEventListener('change', e => { if (e.target.checked) $('.acepta').classList.remove('falta'); });
+    $('#rg-acepta').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pdRegistrarme(); } });
     ['rg-nombre', 'rg-correo', 'rg-area'].forEach((id, i, arr) => {
       $('#' + id).addEventListener('keydown', e => {
         if (e.key !== 'Enter') return;
         e.preventDefault();
-        if (i < arr.length - 1) $('#' + arr[i + 1]).focus(); else pdRegistrarme();
+        if (i < arr.length - 1) $('#' + arr[i + 1]).focus(); else $('#rg-acepta').focus();
       });
     });
     pasos('pd', 1);
@@ -725,9 +733,14 @@ function pdMostrarUsuario(u) {
   enfocar('#pd-art');
 }
 async function pdRegistrarme() {
-  const d = { id: P.u.id, nombre: $('#rg-nombre').value, correo: $('#rg-correo').value, area: $('#rg-area').value };
+  const d = { id: P.u.id, nombre: $('#rg-nombre').value, correo: $('#rg-correo').value, area: $('#rg-area').value, acepta: $('#rg-acepta').checked };
   if (String(d.nombre).trim().split(/\s+/).length < 2) { beep(false); toast('Escribe tu nombre completo (nombre y apellidos).', 'err'); $('#rg-nombre').focus(); return; }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(d.correo).trim())) { beep(false); toast('Escribe un correo válido.', 'err'); $('#rg-correo').focus(); return; }
+  if (String(d.area).trim().length < 2) { beep(false); toast('Escribe tu carrera o área.', 'err'); $('#rg-area').focus(); return; }
+  if (!d.acepta) {
+    beep(false); toast('Para registrarte debes aceptar el reglamento y el uso de bata.', 'err');
+    const l = $('.acepta'); l.classList.remove('shake'); void l.offsetWidth; l.classList.add('shake', 'falta'); return;
+  }
   const b = $('#rg-btn'); btnCarga(b, true);
   try {
     const u = await api('registrarUsuario', d);
@@ -1224,7 +1237,7 @@ async function init() {
   if (!(parseInt(S.data.version, 10) >= VERSION_MIN)) {
     $('#banner').innerHTML = alerta('El servidor de Inventario tiene la versión ' + (S.data.version || '?') + ' y esta página necesita la ' + VERSION_MIN + '.x.\nPega el nuevo inventario/Code.gs en el proyecto de Apps Script de Inventario y publica una nueva versión (Implementar › Administrar implementaciones › Nueva versión).');
   }
-  c.autorizarPrestamo = c.autorizarPrestamo !== false;
+  c.autorizarPrestamo = c.autorizarPrestamo === true;
   c.autorizarDevolucion = c.autorizarDevolucion !== false;
   c.minutosSesion = c.minutosSesion || 10;
   document.documentElement.style.setProperty('--brand', c.color);
