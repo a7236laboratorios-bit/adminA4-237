@@ -12,7 +12,7 @@
  * ════════════════════════════════════════════════════════════════════
  */
 
-const VERSION = '1.0.0';
+const VERSION = '2.2.0';
 
 const HOJAS = {
   CONFIG: 'Configuración',
@@ -26,10 +26,10 @@ const HOJAS = {
  *  reordenarlas o agregar columnas propias sin romper nada. */
 const COLUMNAS = {
   [HOJAS.CONFIG]: ['Clave', 'Valor', 'Descripción'],
-  [HOJAS.MATERIALES]: ['ID', 'Nombre', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas'],
-  [HOJAS.USUARIOS]: ['ID', 'Nombre', 'Correo', 'Área', 'Estatus', 'Notas'],
+  [HOJAS.MATERIALES]: ['ID', 'Nombre', 'No. de serie', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas'],
+  [HOJAS.USUARIOS]: ['ID', 'Nombre', 'Correo', 'Área', 'Estatus', 'Notas', 'Reglamento'],
   [HOJAS.LABS]: ['Nombre', 'PIN', 'Correo', 'Activo', 'Notas'],
-  [HOJAS.HISTORIAL]: ['ID Movimiento', 'Fecha préstamo', 'ID Material', 'Material', 'ID Usuario', 'Usuario', 'Correo', 'Área',
+  [HOJAS.HISTORIAL]: ['ID Movimiento', 'Fecha préstamo', 'ID Material', 'Material', 'No. de serie', 'ID Usuario', 'Usuario', 'Correo', 'Área',
     'Entregó', 'Cantidad', 'Fecha límite', 'Cantidad devuelta', 'Estado', 'Fecha devolución', 'Recibió', 'Notas']
 };
 
@@ -42,18 +42,24 @@ const CONFIG_DEFAULT = [
   ['ENVIAR_CORREOS', 'Sí', 'Sí / No. Enviar comprobantes de préstamo y devolución.'],
   ['CORREO_ADMIN', '', 'Recibe el resumen diario de vencidos y las respuestas de los usuarios.'],
   ['DIAS_PRESTAMO', '7', 'Días para devolver. 0 = el mismo día. Vacío = sin fecha límite.'],
-  ['REQUIERE_PIN', 'Sí', 'Sí / No. El laboratorista confirma con su PIN.'],
   ['BLOQUEAR_CON_VENCIDOS', 'Sí', 'Sí / No. No prestar a quien tenga material vencido.'],
-  ['REGISTRO_LIBRE', 'No', 'Sí / No. Permitir prestar a IDs que no están en la hoja Usuarios.'],
+  ['AUTOREGISTRO', 'Sí', 'Sí / No. Si la credencial no está en Usuarios, la persona captura su nombre y correo y queda registrada.'],
+  ['AUTORIZAR_PRESTAMO', 'No', 'Sí / No. El laboratorista confirma cada préstamo con su contraseña (normalmente No: solo se revisa al devolver).'],
+  ['REGLAMENTO_TEXTO', 'Me comprometo a cumplir el reglamento del laboratorio y a usar bata todo el tiempo que esté en el espacio.', 'Compromiso que el usuario acepta al registrarse.'],
+  ['REGLAMENTO_URL', '', 'Opcional. Enlace (https) al reglamento completo; aparece junto a la casilla.'],
+  ['AUTORIZAR_DEVOLUCION', 'Sí', 'Sí / No. El laboratorista confirma cada devolución con su contraseña.'],
+  ['MINUTOS_SESION', '10', 'Minutos sin actividad para cerrar la sesión del laboratorista en la app.'],
   ['CATEGORIA_LOCKER', 'Locker', 'Los materiales con esta categoría aparecen en el mapa de lockers.'],
   ['LOCKERS_POR_FILA', '9', 'Columnas del mapa de lockers.'],
   ['URL_WEB', 'https://a7236laboratorios-bit.github.io/adminA4-237/inventario.html', 'Opcional. Página en GitHub Pages que usa esta hoja como backend.']
 ];
 
-const PAGINAS = ['inicio', 'prestamo', 'devolucion', 'lockers', 'consulta', 'etiquetas'];
+const PAGINAS = ['pedir', 'devolver', 'inicio', 'lockers', 'consulta', 'usuarios', 'etiquetas'];
+const ALIAS_PAGINA = { prestamo: 'pedir', devolucion: 'devolver', visualizacion: 'lockers' };
 const NOMBRE_PAGINA = {
-  inicio: 'Inicio', prestamo: 'Préstamo', devolucion: 'Devolución',
-  lockers: 'Mapa de lockers', consulta: 'Consulta', etiquetas: 'Etiquetas QR'
+  pedir: 'Pedir material (autoservicio)', devolver: 'Devolver material (autoservicio)',
+  inicio: 'Panel del laboratorista', lockers: 'Mapa de lockers', consulta: 'Consulta',
+  usuarios: 'Usuarios', etiquetas: 'Etiquetas QR'
 };
 
 // ════════════════════════════ MENÚ ════════════════════════════
@@ -83,9 +89,9 @@ function doGet(e) {
     try { args = params.args ? JSON.parse(params.args) : []; } catch (err) { args = []; }
     return ejecutarApi_(params.fn || params.action, args);
   }
-  let p = String(params.p || params.pagina || Object.keys(params)[0] || 'inicio').toLowerCase();
-  if (p === 'visualizacion') p = 'lockers';   // compatibilidad con enlaces anteriores
-  if (PAGINAS.indexOf(p) < 0) p = 'inicio';
+  let p = String(params.p || params.pagina || Object.keys(params)[0] || 'pedir').toLowerCase();
+  p = ALIAS_PAGINA[p] || p;                   // compatibilidad con enlaces anteriores
+  if (PAGINAS.indexOf(p) < 0) p = 'pedir';
   const t = HtmlService.createTemplateFromFile('App');
   t.pagina = p;
   let titulo = 'Préstamo de Material';
@@ -97,13 +103,18 @@ function doGet(e) {
 
 // ════════════════════════════ API (GitHub Pages) ════════════════════════════
 //  inventario.html (alojado en GitHub Pages) llama a esta Web App con
-//  POST {fn, args}. Solo se pueden ejecutar las funciones de esta lista;
-//  las que devuelven datos personales verifican laboratorista + PIN.
+//  POST {fn, args}. Solo se pueden ejecutar las funciones de esta lista.
+//  · Autoservicio (sin sesión): identificar, autorregistrarse, pedir, devolver.
+//    Pedir y devolver exigen la contraseña del laboratorista que autoriza.
+//  · Administración: todo lo demás exige laboratorista + contraseña.
 
 const API_FUNCIONES = {
-  getAppData, getResumen, validarLaboratorista, buscarUsuario, prestamosDeUsuario,
-  registrarPrestamo, buscarParaDevolucion, registrarDevolucion, getLockers,
-  consultar, listarActivos, listarUsuarios
+  // autoservicio
+  getAppData, identificarUsuario, registrarUsuario, identificarParaDevolucion,
+  registrarPrestamo, registrarDevolucion, getLockers,
+  // laboratorista
+  validarLaboratorista, getResumen, buscarUsuario, prestamosDeUsuario, buscarParaDevolucion,
+  consultar, listarActivos, listarUsuarios, getUsuariosAdmin, guardarUsuario
 };
 
 function doPost(e) {
@@ -136,8 +147,14 @@ function getAppData() {
       institucion: String(cfg.NOMBRE_INSTITUCION || ''),
       color: /^#[0-9a-f]{3,8}$/i.test(color) ? color : '#1F6FEB',
       logo: /^https:\/\//i.test(logo) ? logo : '',
-      requierePin: si_(cfg.REQUIERE_PIN),
-      registroLibre: si_(cfg.REGISTRO_LIBRE),
+      autoregistro: si_(cfg.AUTOREGISTRO),
+      autorizarPrestamo: si_(cfg.AUTORIZAR_PRESTAMO),
+      reglamentoTexto: String(cfg.REGLAMENTO_TEXTO || '').trim(),
+      reglamentoUrl: /^https:\/\//i.test(String(cfg.REGLAMENTO_URL || '').trim()) ? String(cfg.REGLAMENTO_URL).trim() : '',
+      autorizarDevolucion: si_(cfg.AUTORIZAR_DEVOLUCION),
+      dominioCorreo: dominio_(cfg),
+      minutosSesion: Math.max(1, Math.min(240, num_(cfg.MINUTOS_SESION, 10))),
+      diasPrestamo: String(cfg.DIAS_PRESTAMO === undefined ? '' : cfg.DIAS_PRESTAMO).trim(),
       lockersPorFila: Math.max(1, Math.min(24, num_(cfg.LOCKERS_POR_FILA, 9))),
       categoriaLocker: String(cfg.CATEGORIA_LOCKER || 'Locker')
     },
@@ -157,6 +174,141 @@ function validarLaboratorista(nombre, pin) {
   return { nombre: lab.nombre };
 }
 
+// ─────────────── AUTOSERVICIO (lo usa el propio usuario) ───────────────
+
+/** El usuario escanea su credencial. Devuelve solo lo necesario para atenderlo. */
+function identificarUsuario(codigo) {
+  const cfg = getConfig_();
+  const u = evaluarUsuario_(codigo, cfg, modelo_(cfg), usuarios_(cfg));
+  return publicoUsuario_(u, cfg);
+}
+
+/**
+ * Autorregistro: la credencial no estaba en Usuarios.
+ * d = { id, nombre, correo, area? }
+ */
+function registrarUsuario(d) {
+  d = d || {};
+  const cfg = getConfig_();
+  if (!si_(cfg.AUTOREGISTRO)) throw new Error('El registro de usuarios nuevos está desactivado. Acude con el laboratorista.');
+  const id = String(d.id || '').trim();
+  const nombre = String(d.nombre || '').replace(/\s+/g, ' ').trim();
+  const correo = String(d.correo || '').trim().toLowerCase();
+  const area = String(d.area || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!/^[A-Za-z0-9._-]{3,40}$/.test(id)) throw new Error('El ID de la credencial no es válido.');
+  if (nombre.length < 5 || nombre.split(' ').length < 2 || nombre.length > 120) throw new Error('Escribe tu nombre completo (nombre y apellidos).');
+  if (!emailValido_(correo)) throw new Error('Escribe un correo válido.');
+  if (area.length < 2) throw new Error('Escribe tu carrera o área.');
+  if (d.acepta !== true) throw new Error('Debes aceptar el reglamento y el uso de bata para registrarte.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    if (usuarios_(cfg)[id_(id)]) throw new Error('Ese ID ya está registrado. Vuelve a escanear tu credencial.');
+    const t = tabla_(HOJAS.USUARIOS);
+    const row = new Array(t.headers.length).fill('');
+    const put = (col, v) => { const i = t.c(col, true); if (i >= 0) row[i] = v; };
+    put('ID', id); put('Nombre', nombre); put('Correo', correo); put('Área', area);
+    put('Estatus', 'Activo'); put('Notas', 'Autorregistro ' + fmt_(new Date()));
+    put('Reglamento', 'Aceptado ' + fmt_(new Date()));
+    t.sh.getRange(t.sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  return identificarUsuario(id);
+}
+
+/** Devolución: el usuario escanea su credencial o un artículo que tiene. */
+function identificarParaDevolucion(codigo) {
+  const cfg = getConfig_();
+  const md = modelo_(cfg), usuarios = usuarios_(cfg), id = id_(codigo);
+  if (!id) throw new Error('Escanea tu credencial o un artículo.');
+  if (usuarios[id] || md.activos.some(a => id_(a.usuarioId) === id)) {
+    return { tipo: 'usuario', usuario: publicoUsuario_(evaluarUsuario_(id, cfg, md, usuarios), cfg) };
+  }
+  const idMat = md.porSerie[id] ? id_(md.porSerie[id].id) : id;
+  const conMat = md.activos.filter(a => id_(a.materialId) === idMat);
+  if (conMat.length) {
+    const ids = [];
+    conMat.forEach(a => { if (ids.indexOf(id_(a.usuarioId)) < 0) ids.push(id_(a.usuarioId)); });
+    if (ids.length > 1) throw new Error('"' + conMat[0].material + '" lo tienen varias personas. Escanea tu credencial.');
+    return { tipo: 'material', materialId: conMat[0].materialId, usuario: publicoUsuario_(evaluarUsuario_(ids[0], cfg, md, usuarios), cfg) };
+  }
+  if (md.porId[idMat]) throw new Error('"' + md.porId[idMat].nombre + '" no aparece como prestado.');
+  throw new Error('No encontramos ese código. Escanea tu credencial.');
+}
+
+/** Lo que ve el propio usuario en el kiosco (correo enmascarado). */
+function publicoUsuario_(u, cfg) {
+  return {
+    encontrado: u.encontrado, id: u.id, nombre: u.nombre, area: u.area,
+    correo: enmascarar_(u.correo), estatus: u.estatus, vencidos: u.vencidos,
+    puedePrestar: u.puedePrestar, motivo: u.motivo, puedeRegistrarse: !u.encontrado && si_(cfg.AUTOREGISTRO),
+    activos: u.activos.map(a => ({
+      idMov: a.idMov, materialId: a.materialId, material: a.material, serie: a.serie, cantidad: a.cantidad,
+      pendiente: a.pendiente, fecha: a.fecha, limite: a.limite, vencido: a.vencido, dias: a.dias
+    }))
+  };
+}
+
+/** Quién autoriza un movimiento de autoservicio. */
+function autorizador_(auth, cfg, requerido, clave) {
+  if (!requerido) return { nombre: 'Autoservicio' };
+  if (!auth || !String(auth.pin || '').trim()) throw new Error('AUTORIZAR: Falta la contraseña del laboratorista.');
+  try {
+    return verificarLab_(auth, cfg, clave);
+  } catch (e) {
+    throw new Error(String(e.message).replace(/^SESION:/, 'AUTORIZAR:'));
+  }
+}
+
+// ─────────────── ADMINISTRACIÓN (solo laboratorista) ───────────────
+
+function getUsuariosAdmin(auth) {
+  const cfg = getConfig_();
+  verificarLab_(auth, cfg);
+  const md = modelo_(cfg), u = usuarios_(cfg);
+  return Object.keys(u).map(k => {
+    const act = md.activos.filter(a => id_(a.usuarioId) === k);
+    return {
+      id: u[k].id, nombre: u[k].nombre, correo: u[k].correo, area: u[k].area, estatus: u[k].estatus, notas: u[k].notas,
+      activos: act.reduce((s, a) => s + a.pendiente, 0), vencidos: act.filter(a => a.vencido).length
+    };
+  });
+}
+
+/** Crea o edita un usuario. d = { id, nombre, correo, area, estatus, notas, nuevo } */
+function guardarUsuario(auth, d) {
+  d = d || {};
+  const cfg = getConfig_();
+  verificarLab_(auth, cfg);
+  const id = String(d.id || '').trim();
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(id)) throw new Error('ID inválido (solo letras, números, punto, guion).');
+  const nombre = String(d.nombre || '').replace(/\s+/g, ' ').trim();
+  if (!nombre) throw new Error('Falta el nombre.');
+  const correo = String(d.correo || '').trim();
+  if (correo && !emailValido_(correo)) throw new Error('Correo inválido.');
+  const estatus = norm_(d.estatus) === 'bloqueado' ? 'Bloqueado' : 'Activo';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const t = tabla_(HOJAS.USUARIOS), cId = t.c('ID');
+    const i = t.rows.findIndex(r => id_(r[cId]) === id_(id));
+    if (d.nuevo && i >= 0) throw new Error('Ya existe un usuario con ese ID.');
+    if (!d.nuevo && i < 0) throw new Error('No se encontró el usuario ' + id + '.');
+    const row = i >= 0 ? t.rows[i].slice() : new Array(t.headers.length).fill('');
+    const put = (col, v) => { const k = t.c(col, true); if (k >= 0) row[k] = v; };
+    put('ID', i >= 0 ? row[cId] : id); put('Nombre', nombre); put('Correo', correo);
+    put('Área', String(d.area || '').trim()); put('Estatus', estatus); put('Notas', String(d.notas || '').trim().slice(0, 500));
+    const fila = i >= 0 ? i + 2 : t.sh.getLastRow() + 1;
+    t.sh.getRange(fila, 1, 1, row.length).setValues([row]);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  return getUsuariosAdmin(auth);
+}
+
 function buscarUsuario(auth, codigo) {
   const cfg = getConfig_();
   verificarLab_(auth, cfg);
@@ -169,7 +321,8 @@ function prestamosDeUsuario(auth, codigo) {
 
 /**
  * Registra un préstamo.
- * p = { usuarioId, nombreUsuario?, articulos: [{id, cantidad}], notas? }
+ * auth = { pin } del laboratorista que autoriza (si AUTORIZAR_PRESTAMO = Sí).
+ * p = { usuarioId, articulos: [{id, cantidad}], notas? }
  */
 function registrarPrestamo(auth, p) {
   p = p || {};
@@ -178,12 +331,11 @@ function registrarPrestamo(auth, p) {
   let res, cfg, aviso;
   try {
     cfg = getConfig_();
-    const lab = verificarLab_(auth, cfg);
     const md = modelo_(cfg);
     const u = evaluarUsuario_(p.usuarioId, cfg, md, usuarios_(cfg));
     if (!u.puedePrestar) throw new Error(u.motivo);
-    const nombreU = u.encontrado ? u.nombre : String(p.nombreUsuario || '').trim().slice(0, 120);
-    if (!nombreU) throw new Error('Escribe el nombre de la persona (su ID no está registrado).');
+    const lab = autorizador_(auth, cfg, si_(cfg.AUTORIZAR_PRESTAMO), 'u_' + id_(u.id));
+    const nombreU = u.nombre;
 
     // Agrupa artículos repetidos
     const pedidos = {}, orden = [];
@@ -208,7 +360,7 @@ function registrarPrestamo(auth, p) {
 
     const ahora = new Date();
     const limite = fechaLimite_(ahora, cfg);
-    const correo = u.encontrado ? u.correo : correoDe_(u.id, '', cfg);
+    const correo = u.correo;
     const notas = String(p.notas || '').trim().slice(0, 500);
     const H = md.H, ncol = md.th.headers.length;
     let seq = siguienteSeq_(md);
@@ -221,6 +373,7 @@ function registrarPrestamo(auth, p) {
       put(H.fecha, ahora);
       put(H.mat, m.id);
       put(H.matNom, m.nombre);
+      put(H.serie, m.serie);
       put(H.usr, u.id);
       put(H.usrNom, nombreU);
       put(H.correo, correo);
@@ -249,7 +402,7 @@ function registrarPrestamo(auth, p) {
     lock.releaseLock();
   }
   // El correo se manda fuera del candado para no frenar a otros mostradores
-  if (correoPrestamo_(cfg, aviso)) res.correo = aviso.para;
+  if (correoPrestamo_(cfg, aviso)) res.correo = enmascarar_(aviso.para);
   return res;
 }
 
@@ -266,7 +419,8 @@ function buscarParaDevolucion(auth, codigo) {
   if (usuarios[id] || md.activos.some(a => id_(a.usuarioId) === id)) {
     return { tipo: 'usuario', usuario: evaluarUsuario_(id, cfg, md, usuarios) };
   }
-  const conMat = md.activos.filter(a => id_(a.materialId) === id);
+  const idMat = md.porSerie[id] ? id_(md.porSerie[id].id) : id;
+  const conMat = md.activos.filter(a => id_(a.materialId) === idMat);
   if (conMat.length) {
     const ids = [];
     conMat.forEach(a => { if (ids.indexOf(id_(a.usuarioId)) < 0) ids.push(id_(a.usuarioId)); });
@@ -281,7 +435,7 @@ function buscarParaDevolucion(auth, codigo) {
       })
     };
   }
-  if (md.porId[id]) throw new Error('"' + md.porId[id].nombre + '" no está prestado en este momento.');
+  if (md.porId[idMat]) throw new Error('"' + md.porId[idMat].nombre + '" no está prestado en este momento.');
   throw new Error('No se encontró ningún usuario ni artículo prestado con el código "' + String(codigo).trim() + '".');
 }
 
@@ -296,10 +450,10 @@ function registrarDevolucion(auth, p) {
   let res, cfg, aviso;
   try {
     cfg = getConfig_();
-    const lab = verificarLab_(auth, cfg);
     const md = modelo_(cfg);
     const uid = id_(p.usuarioId);
     if (!uid) throw new Error('Falta el usuario que devuelve.');
+    const lab = autorizador_(auth, cfg, si_(cfg.AUTORIZAR_DEVOLUCION), 'u_' + uid);
 
     const agg = {}, orden = [];
     (p.items || []).forEach(it => {
@@ -356,7 +510,7 @@ function registrarDevolucion(auth, p) {
   } finally {
     lock.releaseLock();
   }
-  if (correoDevolucion_(cfg, aviso)) res.correo = aviso.para;
+  if (correoDevolucion_(cfg, aviso)) res.correo = enmascarar_(aviso.para);
   return res;
 }
 
@@ -403,7 +557,7 @@ function consultar(auth, texto) {
       if (norm_(u.nombre).indexOf(q) >= 0 || norm_(u.id).indexOf(q) >= 0) out.coincidencias.push({ tipo: 'Usuario', id: u.id, nombre: u.nombre, extra: u.area });
     });
     md.materiales.forEach(m => {
-      if (norm_(m.nombre).indexOf(q) >= 0 || norm_(m.id).indexOf(q) >= 0) out.coincidencias.push({ tipo: 'Material', id: m.id, nombre: m.nombre, extra: m.ubicacion });
+      if (norm_(m.nombre).indexOf(q) >= 0 || norm_(m.id).indexOf(q) >= 0 || (m.serie && norm_(m.serie).indexOf(q) >= 0)) out.coincidencias.push({ tipo: 'Material', id: m.id, nombre: m.nombre, extra: [m.serie ? 'S/N ' + m.serie : '', m.ubicacion].filter(String).join(' · ') });
     });
     out.coincidencias = out.coincidencias.slice(0, 40);
   }
@@ -436,7 +590,7 @@ function modelo_(cfg) {
   const tm = tabla_(HOJAS.MATERIALES);
   const M = {
     id: tm.c('ID'), nombre: tm.c('Nombre'), cat: tm.c('Categoría', true),
-    ubi: tm.c('Ubicación', true), total: tm.c('Cantidad total', true)
+    ubi: tm.c('Ubicación', true), total: tm.c('Cantidad total', true), serie: tm.c('No. de serie', true)
   };
   const materiales = [], porId = {}, duplicados = [];
   tm.rows.forEach((r, i) => {
@@ -449,6 +603,7 @@ function modelo_(cfg) {
       nombre: String(r[M.nombre]).trim() || String(r[M.id]).trim(),
       categoria: String(cel_(r, M.cat)).trim(),
       ubicacion: String(cel_(r, M.ubi)).trim(),
+      serie: String(cel_(r, M.serie)).trim(),
       total: Math.max(0, num_(cel_(r, M.total), 1)),
       prestado: 0
     };
@@ -472,7 +627,7 @@ function modelo_(cfg) {
     const mov = {
       fila: i + 2, idMov: idMov,
       fecha: fecha_(r[H.fecha]),
-      materialId: String(r[H.mat]).trim(), material: String(r[H.matNom]).trim(),
+      materialId: String(r[H.mat]).trim(), material: String(r[H.matNom]).trim(), serie: String(cel_(r, H.serie)).trim(),
       usuarioId: String(r[H.usr]).trim(), usuario: String(cel_(r, H.usrNom)).trim(),
       correo: String(cel_(r, H.correo)).trim(), area: String(cel_(r, H.area)).trim(),
       entrego: String(cel_(r, H.entrego)).trim(),
@@ -488,16 +643,21 @@ function modelo_(cfg) {
       if (m) m.prestado += pend;
     }
   });
+  // Permite escanear el número de serie en lugar del ID (si es único y no choca con un ID)
+  const porSerie = {}, serieRep = {};
+  materiales.forEach(m => { const k = id_(m.serie); if (!k) return; if (porSerie[k]) serieRep[k] = 1; porSerie[k] = m; });
+  Object.keys(serieRep).forEach(k => { delete porSerie[k]; });
+  Object.keys(porSerie).forEach(k => { if (porId[k]) delete porSerie[k]; });
   materiales.forEach(m => {
     m.disponible = Math.max(m.total - m.prestado, 0);
     m.estatus = estatusMat_(m);
   });
-  return { cfg, tm, th, H, materiales, porId, duplicados, movs, activos: movs.filter(x => x.activo) };
+  return { cfg, tm, th, H, materiales, porId, porSerie, duplicados, movs, activos: movs.filter(x => x.activo) };
 }
 
 function colsHist_(th) {
   return {
-    idMov: th.c('ID Movimiento'), fecha: th.c('Fecha préstamo'), mat: th.c('ID Material'), matNom: th.c('Material'),
+    idMov: th.c('ID Movimiento'), fecha: th.c('Fecha préstamo'), mat: th.c('ID Material'), matNom: th.c('Material'), serie: th.c('No. de serie', true),
     usr: th.c('ID Usuario'), usrNom: th.c('Usuario', true), correo: th.c('Correo', true), area: th.c('Área', true),
     entrego: th.c('Entregó', true), cant: th.c('Cantidad'), limite: th.c('Fecha límite', true),
     dev: th.c('Cantidad devuelta'), estado: th.c('Estado'), fechaDev: th.c('Fecha devolución'),
@@ -564,9 +724,11 @@ function evaluarUsuario_(codigo, cfg, md, usuarios) {
     puedePrestar: true,
     motivo: ''
   };
-  if (!u && !si_(cfg.REGISTRO_LIBRE)) {
+  if (!u) {
     r.puedePrestar = false;
-    r.motivo = 'El ID "' + r.id + '" no está registrado en la hoja Usuarios.';
+    r.motivo = si_(cfg.AUTOREGISTRO)
+      ? 'Tu credencial aún no está registrada.'
+      : 'El ID "' + r.id + '" no está registrado. Acude con el laboratorista.';
   } else if (u && norm_(u.estatus) === 'bloqueado') {
     r.puedePrestar = false;
     r.motivo = 'Usuario BLOQUEADO.' + (u.notas && norm_(u.notas) !== 'ejemplo' ? ' Motivo: ' + u.notas : '');
@@ -589,23 +751,35 @@ function laboratoristas_() {
 }
 
 /** Valida al laboratorista (y su PIN). Bloquea 5 min tras 5 intentos fallidos. */
-function verificarLab_(auth, cfg) {
+/**
+ * Valida al laboratorista por su contraseña (columna PIN de la hoja Laboratoristas).
+ *  · auth = { lab, pin } → inicio de sesión del modo administrador.
+ *  · auth = { pin }      → autorización en el kiosco: se identifica solo con la contraseña.
+ * Bloquea 5 minutos tras 5 intentos fallidos (por laboratorista o por usuario del kiosco).
+ */
+function verificarLab_(auth, cfg, clave) {
   cfg = cfg || getConfig_();
   auth = auth || {};
   const nombre = String(auth.lab || '').trim();
-  if (!nombre) throw new Error('SESION: Selecciona tu nombre de laboratorista.');
+  const pin = String(auth.pin || '').trim();
+  if (!nombre && !pin) throw new Error('SESION: Inicia sesión como laboratorista.');
   const cache = CacheService.getScriptCache();
-  const key = 'pinfail_' + norm_(nombre).replace(/[^a-z0-9]/g, '_').slice(0, 200);
+  const key = 'pinfail_' + norm_(nombre || clave || 'kiosco').replace(/[^a-z0-9]/g, '_').slice(0, 200);
   const fallos = Number(cache.get(key) || 0);
   if (fallos >= 5) throw new Error('SESION: Demasiados intentos fallidos. Espera 5 minutos.');
-  const lab = laboratoristas_().find(l => l.activo && norm_(l.nombre) === norm_(nombre));
-  if (!lab) throw new Error('SESION: "' + nombre + '" no existe o está inactivo en la hoja Laboratoristas.');
-  if (si_(cfg.REQUIERE_PIN)) {
-    if (!lab.pin) throw new Error('SESION: ' + lab.nombre + ' no tiene PIN en la hoja Laboratoristas.');
-    if (String(auth.pin || '').trim() !== lab.pin) {
-      cache.put(key, String(fallos + 1), 300);
-      throw new Error('SESION: PIN incorrecto.');
-    }
+  const activos = laboratoristas_().filter(l => l.activo);
+  const fallar = msg => { cache.put(key, String(fallos + 1), 300); throw new Error('SESION: ' + msg); };
+  let lab;
+  if (nombre) {
+    lab = activos.find(l => norm_(l.nombre) === norm_(nombre));
+    if (!lab) throw new Error('SESION: "' + nombre + '" no existe o está inactivo en la hoja Laboratoristas.');
+    if (!lab.pin) throw new Error('SESION: ' + lab.nombre + ' no tiene contraseña en la hoja Laboratoristas.');
+    if (pin !== lab.pin) fallar('Contraseña incorrecta.');
+  } else {
+    const l = activos.filter(x => x.pin && x.pin === pin);
+    if (!l.length) fallar('Contraseña de laboratorista incorrecta.');
+    if (l.length > 1) throw new Error('SESION: Esa contraseña la comparten varios laboratoristas; cada uno debe tener la suya.');
+    lab = l[0];
   }
   if (fallos) cache.remove(key);
   return lab;
@@ -631,14 +805,14 @@ function resumen_(md) {
 
 function matPub_(m) {
   return {
-    id: m.id, nombre: m.nombre, categoria: m.categoria, ubicacion: m.ubicacion,
+    id: m.id, nombre: m.nombre, serie: m.serie, categoria: m.categoria, ubicacion: m.ubicacion,
     total: m.total, prestado: m.prestado, disponible: m.disponible, estatus: m.estatus
   };
 }
 
 function movPub_(a) {
   return {
-    idMov: a.idMov, materialId: a.materialId, material: a.material,
+    idMov: a.idMov, materialId: a.materialId, material: a.material, serie: a.serie,
     usuarioId: a.usuarioId, usuario: a.usuario, area: a.area, entrego: a.entrego,
     cantidad: a.cantidad, devuelta: a.devuelta, pendiente: a.pendiente, estado: a.estado,
     fecha: fmt_(a.fecha), limite: fmt_(a.limite, 'dd/MM/yyyy'), vencido: a.vencido,
@@ -870,7 +1044,7 @@ function instalar() {
   actualizarMateriales_();
   avisar_(nuevas.length
     ? 'Plantilla instalada (' + nuevas.join(', ') + ').\n\n' +
-      '1) Ajusta la hoja Configuración.\n2) Cambia el PIN 1234 del laboratorista de ejemplo.\n' +
+      '1) Ajusta la hoja Configuración.\n2) Cambia la contraseña 1234 del laboratorista de ejemplo (columna PIN).\n' +
       '3) Publica la app: Extensiones > Apps Script > Implementar > Nueva implementación > Aplicación web.\n' +
       '4) Cuando cargues tus datos reales usa Almacén > Borrar datos de ejemplo.'
     : 'La estructura ya estaba completa. Se agregaron las columnas o claves de configuración que faltaban.');
@@ -923,7 +1097,9 @@ function darFormato_(sh, nombre) {
       break;
 
     case HOJAS.MATERIALES: {
-      anchos([110, 240, 130, 130, 110, 100, 120, 200]);
+      anchos([110, 240, 150, 130, 130, 110, 100, 120, 200]);
+      rango('No. de serie').setNumberFormat('@');
+      sh.getRange(1, col('No. de serie')).setNote('Número de serie del fabricante. Opcional; si tiene código de barras también se puede escanear.');
       rango('ID').setNumberFormat('@');
       rango('Cantidad total').setNumberFormat('0');
       rango('Disponible').setBackground('#f3f4f6');
@@ -955,12 +1131,12 @@ function darFormato_(sh, nombre) {
       anchos([220, 90, 240, 80, 200]);
       rango('PIN').setNumberFormat('@');
       lista('Activo', ['Sí', 'No']);
-      sh.getRange(1, col('PIN')).setNote('PIN numérico para confirmar movimientos desde la app.');
+      sh.getRange(1, col('PIN')).setNote('Contraseña del laboratorista: autoriza préstamos/devoluciones y abre el modo administrador. Debe ser distinta para cada uno.');
       break;
 
     case HOJAS.HISTORIAL: {
-      anchos([100, 130, 100, 200, 110, 190, 200, 140, 150, 75, 100, 80, 95, 130, 150, 200]);
-      ['ID Material', 'ID Usuario'].forEach(n => rango(n).setNumberFormat('@'));
+      anchos([100, 130, 100, 200, 140, 110, 190, 200, 140, 150, 75, 100, 80, 95, 130, 150, 200]);
+      ['ID Material', 'No. de serie', 'ID Usuario'].forEach(n => rango(n).setNumberFormat('@'));
       ['Fecha préstamo', 'Fecha devolución'].forEach(n => rango(n).setNumberFormat('dd/MM/yyyy HH:mm'));
       rango('Fecha límite').setNumberFormat('dd/MM/yyyy');
       lista('Estado', ['Prestado', 'Parcial', 'Devuelto', 'Cancelado']);
@@ -986,14 +1162,14 @@ function datosEjemplo_(sh, nombre) {
   let filas = [];
   if (nombre === HOJAS.MATERIALES) {
     filas = [
-      ['MAT001', 'Multímetro digital', 'Electrónica', 'Estante A1', 5, '', '', E],
-      ['MAT002', 'Osciloscopio 2 canales', 'Electrónica', 'Mesa 2', 2, '', '', E],
-      ['MAT003', 'Cautín 60 W', 'Electrónica', 'Estante A2', 8, '', '', E],
-      ['MAT004', 'Vernier digital', 'Metrología', 'Cajón B1', 6, '', '', E],
-      ['MAT005', 'Taladro inalámbrico', 'Herramienta', 'Gabinete C', 1, '', '', E],
-      ['MAT006', 'Kit Arduino UNO', 'Electrónica', 'Estante A3', 10, '', '', E]
+      ['MAT001', 'Multímetro digital', '', 'Electrónica', 'Estante A1', 5, '', '', E],
+      ['MAT002', 'Osciloscopio 2 canales', 'TDS2002C0042', 'Electrónica', 'Mesa 2', 1, '', '', E],
+      ['MAT003', 'Cautín 60 W', '', 'Electrónica', 'Estante A2', 8, '', '', E],
+      ['MAT004', 'Vernier digital', '', 'Metrología', 'Cajón B1', 6, '', '', E],
+      ['MAT005', 'Taladro inalámbrico', 'DCD7713305', 'Herramienta', 'Gabinete C', 1, '', '', E],
+      ['MAT006', 'Kit Arduino UNO', '', 'Electrónica', 'Estante A3', 10, '', '', E]
     ];
-    for (let i = 1; i <= 12; i++) filas.push(['L' + i, 'Locker ' + i, 'Locker', 'Pasillo', 1, '', '', E]);
+    for (let i = 1; i <= 12; i++) filas.push(['L' + i, 'Locker ' + i, '', 'Locker', 'Pasillo', 1, '', '', E]);
   } else if (nombre === HOJAS.USUARIOS) {
     filas = [
       ['A00000001', 'Ana López Ruiz', 'ana.lopez@example.com', 'Mecatrónica', 'Activo', E],
@@ -1064,6 +1240,15 @@ function correoDe_(id, correo, cfg) {
   if (!dom || !id) return '';
   if (dom.charAt(0) !== '@') dom = '@' + dom;
   return String(id).trim().toLowerCase() + dom;
+}
+function dominio_(cfg) {
+  let dom = String(cfg.DOMINIO_CORREO || '').trim();
+  if (dom && dom.charAt(0) !== '@') dom = '@' + dom;
+  return dom;
+}
+function enmascarar_(c) {
+  const m = /^([^@]{0,2})([^@]*)(@.*)$/.exec(String(c || '').trim());
+  return m ? m[1] + (m[2] ? '•••' : '') + m[3] : '';
 }
 function esc_(s) {
   return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
