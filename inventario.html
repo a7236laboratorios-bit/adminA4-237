@@ -164,6 +164,23 @@ table.t{width:100%;border-collapse:collapse}
 .cat-det .im img{width:100%;height:100%;object-fit:contain;background:#fff}
 .cat-det .qrbig{width:190px;height:190px;margin:4px auto 6px}
 .cat-det .qrbig svg{display:block;width:100%;height:100%}
+#ct-print{display:none}
+.cp-sec{break-before:page;page-break-before:always}
+.cp-sec:first-child{break-before:auto;page-break-before:auto}
+.cp-head{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:2mm;margin-bottom:4mm;font-family:system-ui,Arial,sans-serif}
+.cp-head b{font-size:15pt}.cp-head span{font-size:9pt;color:#444;text-align:right}
+.cp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+.cp-it{border:1px solid #bbb;border-radius:3mm;padding:2.5mm;break-inside:avoid;page-break-inside:avoid;display:flex;flex-direction:column;gap:1.5mm;font-family:system-ui,Arial,sans-serif}
+.cp-img{height:38mm;display:flex;align-items:center;justify-content:center;background:#fff}
+.cp-img img{max-width:100%;max-height:100%;object-fit:contain}
+.cp-img .ph{font-size:28pt;opacity:.3}
+.cp-row{display:flex;gap:2mm;align-items:flex-end}
+.cp-row .tx{flex:1;min-width:0}
+.cp-row b{display:block;font-size:10pt;line-height:1.2;word-break:break-word}
+.cp-row .id{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:9pt;margin-top:.5mm}
+.cp-row .ub{font-size:8pt;color:#444}
+.cp-qr{width:22mm;height:22mm;flex:none}
+.cp-qr svg{display:block;width:100%;height:100%}
 .labels{display:flex;flex-wrap:wrap;gap:3mm;padding:3mm;background:#fff}
 .label{border:1px dashed #9ca3af;padding:2mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;break-inside:avoid;page-break-inside:avoid;overflow:hidden}
 .label .qr svg,.label .qr img{display:block;width:100%;height:100%}
@@ -183,6 +200,10 @@ table.t{width:100%;border-collapse:collapse}
   body *{visibility:hidden}
   #print-area,#print-area *{visibility:visible}
   #print-area{position:absolute;left:0;top:0;width:100%}
+  body.imp-cat #print-area{display:none}
+  body.imp-cat main,body.imp-cat header,body.imp-cat .banner{display:none}
+  body.imp-cat #ct-print{display:block;visibility:visible}
+  body.imp-cat #ct-print *{visibility:visible}
   .label{border-color:#d1d5db}
 }
 </style>
@@ -307,6 +328,7 @@ table.t{width:100%;border-collapse:collapse}
         <select id="ct-cat" style="max-width:200px" onchange="ctPintar()"></select>
         <label style="display:flex;gap:6px;align-items:center;font-size:14px;white-space:nowrap"><input type="checkbox" id="ct-disp" style="width:auto" onchange="ctPintar()"> Solo disponibles</label>
         <button class="btn sm" id="ct-ref" onclick="ctCargar(true)" title="Volver a leer la hoja">↻ Actualizar</button>
+        <button class="btn sm pri" id="ct-imp" onclick="ctImprimir()" title="Imprime lo que se ve en pantalla (usa la categoría para reimprimir solo esa hoja)">🖨️ Imprimir</button>
       </div>
       <div class="hint" id="ct-info"></div>
     </div>
@@ -409,6 +431,7 @@ table.t{width:100%;border-collapse:collapse}
   <div class="modal" id="m-info-c"></div>
 </div>
 
+<div id="ct-print"></div>
 <div id="toasts"></div>
 
 <script>
@@ -1218,6 +1241,49 @@ function ctVer(id) {
     '<div class="row" style="margin-top:16px"><span class="sp"></span><button class="btn" onclick="cerrar(\'#m-info\')">Cerrar</button>' +
     '<button class="btn pri" onclick="cerrar(\'#m-info\');ir(\'pedir\')">📤 Ir a Pedir</button></div></div>';
   abrir('#m-info');
+}
+
+/** Imprime el catálogo (lo filtrado en pantalla), una categoría por hoja. */
+function ctFiltrados() {
+  const q = idn($('#ct-q').value), cat = $('#ct-cat').value, solo = $('#ct-disp').checked;
+  return ctLista().filter(m => (!cat || m.categoria === cat) && (!solo || m.disponible > 0) &&
+    (!q || [m.nombre, m.id, m.categoria, m.serie].some(x => idn(x).indexOf(q) >= 0)));
+}
+async function ctImprimir() {
+  const b = $('#ct-imp');
+  btnCarga(b, true, 'Preparando…');
+  try {
+    _ctUlt = 0; await ctCargar(false);
+    try { await cargarLib(LIB_QR); } catch (e) { toast('Sin conexión para generar los QR.', 'err'); return; }
+    const lista = ctFiltrados();
+    if (!lista.length) { toast('No hay materiales para imprimir con este filtro.', 'err'); return; }
+    const grupos = {};
+    lista.forEach(m => { const c = m.categoria || 'Sin categoría'; (grupos[c] = grupos[c] || []).push(m); });
+    const hoy = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const c = S.data.config;
+    const area = $('#ct-print');
+    area.innerHTML = Object.keys(grupos).sort((a, b) => a.localeCompare(b, 'es')).map(cat => {
+      const its = grupos[cat].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+      return '<section class="cp-sec"><div class="cp-head"><div><b>' + esc(cat) + '</b><div style="font-size:9pt;color:#444">' + esc(c.sistema) + (c.institucion ? ' · ' + esc(c.institucion) : '') + '</div></div>' +
+        '<span>' + its.length + ' material(es)<br>Actualizado: ' + esc(hoy) + '</span></div><div class="cp-grid">' +
+        its.map(m => '<div class="cp-it"><div class="cp-img">' +
+          (m.imagen ? '<img referrerpolicy="no-referrer" src="' + esc(m.imagen) + '" onerror="this.outerHTML=\'<span class=ph>📦</span>\'">' : '<span class="ph">📦</span>') +
+          '</div><div class="cp-row"><div class="tx"><b>' + esc(m.nombre) + '</b><div class="id">' + esc(m.id) + '</div>' +
+          (m.ubicacion ? '<div class="ub">📍 ' + esc(m.ubicacion) + '</div>' : '') +
+          (m.serie ? '<div class="ub">S/N ' + esc(m.serie) + '</div>' : '') +
+          '</div><div class="cp-qr">' + ctQr(m.id) + '</div></div></div>').join('') +
+        '</div></section>';
+    }).join('');
+    // espera a que carguen las fotos (máx. 10 s) para que salgan en la impresión
+    await Promise.race([
+      Promise.all($$('img', area).map(i => i.complete ? 0 : new Promise(r => { i.addEventListener('load', r); i.addEventListener('error', r); }))),
+      new Promise(r => setTimeout(r, 10000))
+    ]);
+    document.body.classList.add('imp-cat');
+    const fin = () => { document.body.classList.remove('imp-cat'); window.removeEventListener('afterprint', fin); };
+    window.addEventListener('afterprint', fin);
+    setTimeout(() => window.print(), 100);
+  } finally { btnCarga(b, false); }
 }
 
 PAGES.etiquetas = { show() { etCargar(); } };
