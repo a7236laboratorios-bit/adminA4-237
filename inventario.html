@@ -213,7 +213,7 @@ table.t{width:100%;border-collapse:collapse}
       <div class="card paso" id="pd-c1">
         <h2>Escanea tu credencial</h2>
         <div class="scan">
-          <input id="pd-usr" class="big" placeholder="Pasa tu credencial por el lector" autocomplete="off" spellcheck="false">
+          <input id="pd-usr" class="big" placeholder="Escribe tu matrícula (con L mayúscula)" autocomplete="off" spellcheck="false">
           <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(pdUsuario)">📷</button>
         </div>
         <div id="pd-uinfo"></div>
@@ -855,7 +855,8 @@ async function pdTerminar() {
     pantallaListo('¡Listo, ' + String(r.usuario).split(' ')[0] + '!',
       '<p style="font-size:16px;margin:4px 0">Te llevas ' + r.items.map(i => esc(i.nombre) + ' ×' + i.cantidad).join(', ') + '.</p>' +
       (r.fechaLimite ? '<p style="font-size:18px">Devuélvelo a más tardar el <b>' + esc(r.fechaLimite) + '</b></p>' : '') +
-      '<p class="muted">' + (r.correo ? 'Te enviamos el comprobante a ' + esc(r.correo) : '') + (r.items.length && r.correo ? '' : '') + '</p>');
+      '<p style="font-size:19px;margin:14px 0 6px;padding:12px 14px;border-radius:12px;background:var(--warnbg);color:var(--warn)"><b>🪪 Deja tu credencial con el laboratorista.</b></p>' +
+      '<p class="muted">' + (r.correo ? 'Te enviamos el comprobante a ' + esc(r.correo) : '') + '</p>', 12);
   } catch (e) {
     beep(false); toast(limpio(e), 'err', 8000); pasos('pd', 2);
   } finally { S.busy = false; }
