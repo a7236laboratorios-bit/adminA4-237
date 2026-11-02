@@ -59,6 +59,18 @@ Por defecto `AUTORIZAR_PRESTAMO = No` y `AUTORIZAR_DEVOLUCION = Sí`. Puedes cam
 4. Pégala en `inventario.html`, en la línea `const DEFAULT_API_URL = "";`, y súbelo a GitHub.
    *Atajo sin editar código:* abre una vez `https://a7236laboratorios-bit.github.io/adminA4-237/inventario.html?api=TU_URL_EXEC` y queda guardada en ese navegador.
 
+## 📣 Solicitudes en vivo para el almacén (v2.4)
+
+Pantalla **solo para laboratoristas** (menú **📣 Solicitudes**, o `inventario.html?p=solicitudes`). Pensada para dejarla abierta en una computadora o tablet **dentro del almacén**, cuando el kiosco está lejos.
+
+- **⏳ En el kiosco ahora:** quién está usando el kiosco y qué va escaneando, en vivo (pide o devuelve). Si alguien está devolviendo y espera tu revisión, la tarjeta se marca en amarillo.
+- **📦 Por entregar:** cada préstamo registrado aparece aquí con la foto, la ubicación y la cantidad de cada equipo, para que lo prepares. Toca cada equipo o **escanea lo que le entregas** para palomearlo. Al terminar toca **✓ Entregado**: el préstamo sale de la lista y en *Historial › Entregó* queda tu nombre.
+- **Aviso:** toca **🔔 Activar aviso** una vez (los navegadores no dejan sonar sin un clic). Suena cuando alguien registra un préstamo, llega al kiosco o espera una devolución, y si la pestaña está en segundo plano manda una notificación.
+- Se actualiza sola cada 4 segundos. Mientras esté abierta, la sesión del laboratorista no se cierra por inactividad.
+- Si tienes varios kioscos, ponles nombre abriendo cada uno una vez con `?kiosco=Mostrador` (se queda guardado en ese navegador) y así sabrás desde cuál piden.
+
+**Para activarlo:** pega el nuevo `inventario/Code.gs` en el proyecto de Apps Script del Inventario y publica una **Nueva versión**. No hace falta tocar la hoja (la cola de entregas se guarda en las Propiedades del script).
+
 ## 🗂️ Catálogo con foto y QR (v2.3)
 
 Página **pública** (no pide contraseña) donde los usuarios ven todo el material con su **foto**, su **QR** y si está disponible. Sirve para que sepan exactamente qué piden. Enlace: `inventario.html?p=catalogo` (también aparece en el menú como **🗂️ Catálogo**).
@@ -70,7 +82,7 @@ Página **pública** (no pide contraseña) donde los usuarios ven todo el materi
 
 **Para activarlo** (una vez): pega el nuevo `inventario/Code.gs` en el proyecto de Apps Script del Inventario, guarda, corre **📦 Almacén › Instalar / reparar plantilla** (agrega la columna *Imagen* al final de *Materiales* sin borrar nada) y publica una **Nueva versión** de la implementación.
 
-Enlaces directos: `inventario.html?p=pedir` (kiosco, página por defecto), `?p=devolver`, `?p=catalogo` (catálogo público con foto y QR), `?p=lockers` (vista pública sin nombres, útil para una pantalla en la pared), `?p=inicio`, `?p=consulta`, `?p=usuarios`, `?p=etiquetas`. Los enlaces viejos `?p=prestamo` y `?p=devolucion` siguen funcionando.
+Enlaces directos: `inventario.html?p=pedir` (kiosco, página por defecto), `?p=devolver`, `?p=catalogo` (catálogo público con foto y QR), `?p=solicitudes` (pantalla del almacén), `?p=lockers` (vista pública sin nombres, útil para una pantalla en la pared), `?p=inicio`, `?p=consulta`, `?p=usuarios`, `?p=etiquetas`. Los enlaces viejos `?p=prestamo` y `?p=devolucion` siguen funcionando.
 
 `inventario.html` es una **copia idéntica** de `inventario/App.html`: el mismo archivo funciona dentro de Apps Script y en GitHub Pages. Si editas uno, cópialo al otro con `cp inventario/App.html inventario.html`.
 

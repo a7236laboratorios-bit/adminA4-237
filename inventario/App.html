@@ -164,6 +164,28 @@ table.t{width:100%;border-collapse:collapse}
 .cat-det .im img{width:100%;height:100%;object-fit:contain;background:#fff}
 .cat-det .qrbig{width:190px;height:190px;margin:4px auto 6px}
 .cat-det .qrbig svg{display:block;width:100%;height:100%}
+/* ── Solicitudes en vivo (almacén) ── */
+.mon{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+.mon h2 .cnt{background:var(--brand);color:#fff;border-radius:999px;padding:1px 10px;font-size:13px}
+.mon-card{border:2px solid var(--bd);border-radius:var(--r);background:#fff;padding:14px;margin-bottom:12px}
+.mon-card.nuevo{border-color:#f59e0b;box-shadow:0 0 0 4px #fef3c7;animation:pulso 1.2s ease-in-out 3}
+@keyframes pulso{50%{box-shadow:0 0 0 9px #fde68a}}
+.mon-card.dv{border-color:#86efac}
+.mon-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mon-head b{font-size:17px}
+.mon-it{display:flex;gap:10px;align-items:center;padding:8px 6px;border-top:1px solid var(--bd);cursor:pointer;border-radius:8px}
+.mon-it:first-of-type{border-top:0}
+.mon-it.ok{background:var(--okbg)}
+.mon-it.ok .nm{text-decoration:line-through;color:var(--ok)}
+.mon-it .ph{width:46px;height:46px;border-radius:8px;background:#f3f4f6;flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:22px}
+.mon-it .ph img{width:100%;height:100%;object-fit:contain;background:#fff}
+.mon-it .nm{font-weight:700}
+.mon-it .q{font-size:20px;font-weight:800;min-width:44px;text-align:right}
+.mon-it input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--ok)}
+.mon-vivo{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut)}
+.mon-vivo i{width:9px;height:9px;border-radius:50%;background:#22c55e;animation:lat 1.4s infinite}
+@keyframes lat{50%{opacity:.25}}
+@media (max-width:860px){.mon{grid-template-columns:1fr}}
 #ct-print{display:none}
 .cp-sec{break-before:page;page-break-before:always}
 .cp-sec:first-child{break-before:auto;page-break-before:auto}
@@ -335,6 +357,38 @@ table.t{width:100%;border-collapse:collapse}
     <div class="cat-grid" id="ct-grid"></div>
   </section>
 
+  <!-- ═══════════ SOLICITUDES EN VIVO (almacén) ═══════════ -->
+  <section class="pg" id="pg-solicitudes">
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">📣 Solicitudes en vivo</h2>
+        <span class="mon-vivo" id="mo-vivo"><i></i> conectando…</span>
+        <span class="sp"></span>
+        <button class="btn sm" id="mo-son" onclick="moSonido()">🔔 Activar aviso</button>
+        <button class="btn sm" onclick="moCargar(true)">↻ Actualizar</button>
+      </div>
+      <div class="hint">Déjala abierta en la computadora del almacén: se actualiza sola cada pocos segundos y suena cuando un alumno registra un préstamo o espera una devolución.</div>
+    </div>
+    <div class="mon">
+      <div>
+        <div class="card">
+          <h2>📦 Por entregar <span class="cnt" id="mo-n1">0</span></h2>
+          <div class="scan">
+            <input id="mo-scan" placeholder="Escanea lo que le entregas (opcional) para palomearlo" autocomplete="off" spellcheck="false">
+            <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(moEscaneo)">📷</button>
+          </div>
+          <div class="hint">También puedes tocar cada equipo para palomearlo. Al terminar, toca <b>Entregado</b>.</div>
+        </div>
+        <div id="mo-ent"></div>
+      </div>
+      <div>
+        <div class="card"><h2 style="margin:0">⏳ En el kiosco ahora <span class="cnt" id="mo-n2">0</span></h2>
+          <div class="hint">Lo que el alumno va escaneando, antes de registrar.</div></div>
+        <div id="mo-cur"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════════ CONSULTA ═══════════ -->
   <section class="pg" id="pg-consulta">
     <div class="card">
@@ -458,8 +512,8 @@ function apiUrl() {
 const KIOSCO = { pedir:1, devolver:1 };
 const NAV_KIOSCO = [['pedir','📤 Pedir'],['devolver','📥 Devolver'],['catalogo','🗂️ Catálogo']];
 const PUBLICA = { pedir:1, devolver:1, catalogo:1, lockers:1 };   // se ven sin sesión
-const NAV_ADMIN = [['inicio','Panel'],['lockers','Lockers'],['consulta','Consulta'],['usuarios','Usuarios'],['etiquetas','Etiquetas']];
-const PIDE_SESION = { inicio:1, consulta:1, usuarios:1, etiquetas:1 };   // lockers: sin sesión se ve sin datos personales
+const NAV_ADMIN = [['solicitudes','📣 Solicitudes'],['inicio','Panel'],['lockers','Lockers'],['consulta','Consulta'],['usuarios','Usuarios'],['etiquetas','Etiquetas']];
+const PIDE_SESION = { solicitudes:1, inicio:1, consulta:1, usuarios:1, etiquetas:1 };   // lockers: sin sesión se ve sin datos personales
 const CMD = { REGISTRAR:'CMDREGISTRAR', CANCELAR:'CMDCANCELAR' };
 const LIB_CAM = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
 const LIB_QR = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
@@ -640,6 +694,7 @@ function focoPagina() {
   if (S.pg === 'pedir') enfocar(P.u && P.u.puedePrestar ? '#pd-art' : (P.u && P.u.puedeRegistrarse ? '#rg-nombre' : '#pd-usr'));
   else if (S.pg === 'devolver') enfocar(D.u ? '#dv-art' : '#dv-usr');
   else if (S.pg === 'consulta') enfocar('#cs-q');
+  else if (S.pg === 'solicitudes') enfocar('#mo-scan');
 }
 
 function setCatalogo(lista) {
@@ -844,6 +899,7 @@ function pdPintar(resaltar) {
   $('#pd-s3').textContent = aut ? 'Autorización' : 'Confirmar';
   $('#pd-btn').textContent = aut ? 'Terminar y pedir autorización' : 'Registrar préstamo';
   $('#pd-btn').disabled = !(P.u && P.u.puedePrestar && P.items.length);
+  kqAvisar('pedir');
 }
 function pdCant(k, el) {
   const i = P.items[k], m = S.cat[idn(i.id)] || { disponible: 0 };
@@ -866,12 +922,13 @@ async function pdTerminar() {
   if (!P.items.length) { beep(false); toast('Escanea al menos un equipo.', 'err'); enfocar('#pd-art'); return; }
   S.busy = true;
   pasos('pd', 3);
+  kqAvisar('pedir', 'registrando');
   const u = P.u, items = P.items.map(i => ({ id: i.id, cantidad: i.cantidad })), notas = $('#pd-notas').value;
   const resumen = '<div class="resumen-aut"><b>' + esc(u.nombre) + '</b> <span class="muted mono">' + esc(u.id) + '</span> se lleva:<ul>' +
     P.items.map(i => '<li>' + esc(i.nombre) + ' <b>×' + i.cantidad + '</b></li>').join('') + '</ul></div>';
   try {
     const r = await autorizar(S.data.config.autorizarPrestamo, resumen, pin => api('registrarPrestamo', { pin: pin }, { usuarioId: u.id, articulos: items, notas: notas }));
-    if (!r) { pasos('pd', 2); return; }
+    if (!r) { pasos('pd', 2); kqAvisar('pedir'); return; }
     setCatalogo(r.materiales); S.data.resumen = r.resumen;
     beep(true);
     pdLimpiar(true);
@@ -881,7 +938,7 @@ async function pdTerminar() {
       '<p style="font-size:19px;margin:14px 0 6px;padding:12px 14px;border-radius:12px;background:var(--warnbg);color:var(--warn)"><b>🪪 Deja tu credencial con el laboratorista.</b></p>' +
       '<p class="muted">' + (r.correo ? 'Te enviamos el comprobante a ' + esc(r.correo) : '') + '</p>', 12);
   } catch (e) {
-    beep(false); toast(limpio(e), 'err', 8000); pasos('pd', 2);
+    beep(false); toast(limpio(e), 'err', 8000); pasos('pd', 2); kqAvisar('pedir');
   } finally { S.busy = false; }
 }
 
@@ -952,6 +1009,7 @@ function dvPintar(resaltar) {
   $('#dv-s3').textContent = aut ? 'Autorización' : 'Confirmar';
   $('#dv-btn').textContent = aut ? 'Terminar y pedir autorización' : 'Registrar devolución';
   $('#dv-btn').disabled = !(D.u && D.lin.some(l => l.devolver > 0));
+  kqAvisar('devolver');
 }
 function dvCant(k, el) { let v = Math.floor(Number(el.value)); if (!(v >= 0)) v = 0; D.lin[k].devolver = Math.min(v, D.lin[k].pendiente); dvPintar(); }
 function dvLinea(k) { D.lin[k].devolver = D.lin[k].pendiente; dvPintar(D.lin[k].idMov); enfocar('#dv-art'); }
@@ -970,6 +1028,7 @@ async function dvTerminar() {
   if (!marcadas.length) { beep(false); toast('Escanea al menos un equipo que devuelves.', 'err'); enfocar('#dv-art'); return; }
   S.busy = true;
   pasos('dv', 3);
+  kqAvisar('devolver', S.data.config.autorizarDevolucion ? 'esperando' : 'registrando');
   const u = D.u, items = marcadas.map(l => ({ idMov: l.idMov, cantidad: l.devolver })), notas = $('#dv-notas').value;
   const quedan = D.lin.reduce((s, l) => s + l.pendiente - l.devolver, 0);
   const resumen = '<div class="resumen-aut"><b>' + esc(u.nombre) + '</b> <span class="muted mono">' + esc(u.id) + '</span> devuelve:<ul>' +
@@ -978,7 +1037,7 @@ async function dvTerminar() {
     '<div class="muted" style="margin-top:6px">Revisa físicamente que el material esté completo antes de autorizar.</div></div>';
   try {
     const r = await autorizar(S.data.config.autorizarDevolucion, resumen, pin => api('registrarDevolucion', { pin: pin }, { usuarioId: u.id, items: items, notas: notas }));
-    if (!r) { pasos('dv', 2); return; }
+    if (!r) { pasos('dv', 2); kqAvisar('devolver'); return; }
     setCatalogo(r.materiales); S.data.resumen = r.resumen;
     beep(true);
     dvLimpiar(true);
@@ -987,8 +1046,160 @@ async function dvTerminar() {
       (r.restantes ? '<div class="alert warn" style="display:inline-block">Aún tienes ' + r.restantes + ' pieza(s) pendiente(s).</div>' : '<p style="font-size:17px;color:var(--ok)"><b>Ya no tienes material pendiente.</b></p>') +
       '<p class="muted">' + (r.correo ? 'Te enviamos el comprobante a ' + esc(r.correo) : '') + '</p>');
   } catch (e) {
-    beep(false); toast(limpio(e), 'err', 8000); pasos('dv', 2);
+    beep(false); toast(limpio(e), 'err', 8000); pasos('dv', 2); kqAvisar('devolver');
   } finally { S.busy = false; }
+}
+
+// ═══════════════ AVISO AL ALMACÉN (desde el kiosco) ═══════════════
+// Cada vez que cambia lo que el alumno escaneó, el kiosco manda un resumen al
+// servidor (sin datos sensibles). La pantalla "Solicitudes" lo muestra en vivo.
+const KQ = { id:'', nombre:'', modo:'', t:null, ultimo:'' };
+(function () {
+  try {
+    const n = String(_qs.get('kiosco') || '').trim();
+    if (n) localStorage.setItem('INV_KNOM', n.slice(0, 40));
+    KQ.nombre = localStorage.getItem('INV_KNOM') || '';
+    KQ.id = localStorage.getItem('INV_KID') || '';
+    if (!KQ.id) { KQ.id = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('INV_KID', KQ.id); }
+  } catch (e) { KQ.id = 'k' + Math.random().toString(36).slice(2, 10); }
+})();
+function kqAvisar(modo, etapa) {
+  if (!S.data) return;
+  let est = null;
+  if (modo === 'pedir' && P.u && P.u.puedePrestar) {
+    est = { modo: 'pedir', etapa: etapa || (P.items.length ? 'escaneando' : 'identificado'), usuario: { id: P.u.id, nombre: P.u.nombre, area: P.u.area },
+      items: P.items.map(i => { const m = S.cat[idn(i.id)] || {}; return { id: i.id, nombre: i.nombre, cantidad: i.cantidad, ubicacion: m.ubicacion || '', imagen: m.imagen || '' }; }) };
+  } else if (modo === 'devolver' && D.u) {
+    est = { modo: 'devolver', etapa: etapa || (D.lin.some(l => l.devolver > 0) ? 'escaneando' : 'identificado'), usuario: { id: D.u.id, nombre: D.u.nombre, area: D.u.area },
+      items: D.lin.filter(l => l.devolver > 0).map(l => { const m = S.cat[idn(l.materialId)] || {}; return { id: l.materialId, nombre: l.material, cantidad: l.devolver, ubicacion: m.ubicacion || '', imagen: m.imagen || '' }; }) };
+  }
+  if (!est && KQ.modo && KQ.modo !== modo) return;   // limpiar "Pedir" no borra una devolución en curso
+  KQ.modo = est ? modo : '';
+  if (est) est.kiosco = KQ.nombre;
+  const txt = JSON.stringify(est);
+  if (txt === KQ.ultimo) return;
+  KQ.ultimo = txt;
+  clearTimeout(KQ.t);
+  KQ.t = setTimeout(() => { api('kioscoEstado', KQ.id, est).catch(() => {}); }, est && est.etapa === 'escaneando' ? 500 : 0);
+}
+
+// ═══════════════ SOLICITUDES EN VIVO (almacén) ═══════════════
+const MO = { data:null, t:null, visto:{}, primera:true, sonido:false, marcas:{}, sel:'' };
+PAGES.solicitudes = { show() { moPintar(); moCargar(false); clearInterval(MO.t); MO.t = setInterval(() => { if (S.pg === 'solicitudes' && S.lab) moCargar(false); else clearInterval(MO.t); }, 4000); enfocar('#mo-scan'); } };
+async function moCargar(manual) {
+  if (MO.cargando) return;
+  MO.cargando = true;
+  try {
+    const r = await apiS('getMonitor');
+    S.ultimo = Date.now();   // la pantalla del almacén no cierra la sesión por inactividad mientras está abierta
+    MO.data = r;
+    $('#mo-vivo').innerHTML = '<i></i> en vivo · ' + new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    moNovedades();
+    moPintar();
+    if (manual) toast('Actualizado.', 'ok', 1200);
+  } catch (e) {
+    $('#mo-vivo').innerHTML = '<span style="color:var(--err)">⚠ sin conexión</span>';
+    if (manual) toast(limpio(e), 'err');
+  } finally { MO.cargando = false; }
+}
+function moNovedades() {
+  const d = MO.data, nuevos = [];
+  d.porEntregar.forEach(e => { const k = 'E' + e.folio; if (!MO.visto[k]) { MO.visto[k] = Date.now(); if (!MO.primera) nuevos.push('📦 ' + e.usuario + ' registró un préstamo'); } });
+  d.enCurso.forEach(e => {
+    const k = 'C' + e.kid + e.usuario.id + e.etapa;
+    if (!MO.visto[k]) { MO.visto[k] = Date.now(); if (!MO.primera && (e.etapa === 'esperando' || e.etapa === 'identificado')) nuevos.push(e.etapa === 'esperando' ? '📥 ' + e.usuario.nombre + ' espera que revises su devolución' : '⏳ ' + e.usuario.nombre + ' está en el kiosco'); }
+  });
+  MO.primera = false;
+  if (!nuevos.length) return;
+  moAviso(nuevos.join('\n'));
+}
+function moAviso(txt) {
+  toast(txt, 'ok', 6000);
+  if (MO.sonido) { beep(true); setTimeout(() => beep(true), 180); setTimeout(() => beep(true), 360); }
+  try { if (MO.sonido && window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('Almacén A7-237', { body: txt }); } catch (e) {}
+  const t0 = document.title; let n = 0;
+  const iv = setInterval(() => { document.title = n++ % 2 ? t0 : '🔔 ' + txt.split('\n')[0]; if (n > 9) { clearInterval(iv); document.title = t0; } }, 900);
+}
+function moSonido() {
+  MO.sonido = !MO.sonido;
+  $('#mo-son').textContent = MO.sonido ? '🔔 Aviso activado' : '🔔 Activar aviso';
+  $('#mo-son').classList.toggle('pri', MO.sonido);
+  if (MO.sonido) { beep(true); try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {} }
+}
+function moHace(t) {
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return s < 60 ? 'hace ' + s + ' s' : s < 3600 ? 'hace ' + Math.round(s / 60) + ' min' : 'hace ' + Math.round(s / 3600) + ' h';
+}
+function moFoto(i) {
+  return '<div class="ph">' + (i.imagen ? '<img loading="lazy" referrerpolicy="no-referrer" src="' + esc(i.imagen) + '" onerror="this.outerHTML=\'📦\'">' : '📦') + '</div>';
+}
+function moPintar() {
+  if (!MO.data) { $('#mo-ent').innerHTML = cargando(); $('#mo-cur').innerHTML = ''; return; }
+  const d = MO.data;
+  $('#mo-n1').textContent = d.porEntregar.length;
+  $('#mo-n2').textContent = d.enCurso.length;
+  // limpia marcas de folios que ya no están
+  Object.keys(MO.marcas).forEach(f => { if (!d.porEntregar.some(e => e.folio === f)) delete MO.marcas[f]; });
+  $('#mo-ent').innerHTML = d.porEntregar.length ? d.porEntregar.map(e => {
+    const mk = MO.marcas[e.folio] || {};
+    const total = e.items.reduce((s, i) => s + i.cantidad, 0), hechos = e.items.reduce((s, i) => s + Math.min(mk[i.id] || 0, i.cantidad), 0);
+    const nuevo = Date.now() - (MO.visto['E' + e.folio] || 0) < 15000;
+    return '<div class="mon-card' + (nuevo ? ' nuevo' : '') + '">' +
+      '<div class="mon-head"><div class="avatar" style="width:42px;height:42px;font-size:15px">' + esc(iniciales(e.usuario)) + '</div>' +
+        '<div style="flex:1;min-width:0"><b>' + esc(e.usuario) + '</b><div class="muted" style="font-size:13px"><span class="mono">' + esc(e.usuarioId) + '</span>' + (e.area ? ' · ' + esc(e.area) : '') + ' · ' + moHace(e.t) + (e.kiosco ? ' · ' + esc(e.kiosco) : '') + '</div></div>' +
+        '<span class="badge ' + (hechos >= total ? 'b-ok' : 'b-warn') + '">' + hechos + ' / ' + total + '</span></div>' +
+      '<div style="margin-top:8px">' + e.items.map(i => {
+        const ok = (mk[i.id] || 0) >= i.cantidad;
+        return '<div class="mon-it' + (ok ? ' ok' : '') + '" onclick="moMarcar(' + js(e.folio) + ',' + js(i.id) + ')">' +
+          '<input type="checkbox" tabindex="-1" ' + (ok ? 'checked' : '') + ' onclick="event.preventDefault()">' + moFoto(i) +
+          '<div style="flex:1;min-width:0"><div class="nm">' + esc(i.nombre) + '</div><div class="muted" style="font-size:12.5px"><span class="mono">' + esc(i.id) + '</span>' + (i.ubicacion ? ' · 📍 ' + esc(i.ubicacion) : '') + '</div></div>' +
+          '<div class="q">' + (i.cantidad > 1 ? (mk[i.id] || 0) + '/' : '×') + i.cantidad + '</div></div>';
+      }).join('') + '</div>' +
+      '<div class="row" style="margin-top:10px"><span class="muted" style="font-size:13px">Folio ' + esc(e.folio) + ' · recuerda pedirle su credencial</span><span class="sp"></span>' +
+        '<button class="btn okb" onclick="moEntregar(' + js(e.folio) + ',this)">✓ Entregado</button></div></div>';
+  }).join('') : '<div class="card empty">No hay nada pendiente por entregar.</div>';
+
+  $('#mo-cur').innerHTML = d.enCurso.length ? d.enCurso.map(e => {
+    const dv = e.modo === 'devolver';
+    const et = { identificado: 'Se identificó', escaneando: dv ? 'Escaneando lo que regresa' : 'Escaneando', registrando: 'Registrando…', esperando: '⚠ Espera tu revisión y contraseña' }[e.etapa] || e.etapa;
+    return '<div class="mon-card' + (dv ? ' dv' : '') + (e.etapa === 'esperando' ? ' nuevo' : '') + '">' +
+      '<div class="mon-head"><span class="badge ' + (dv ? 'b-ok' : 'b-inf') + '">' + (dv ? '📥 Devuelve' : '📤 Pide') + '</span><b>' + esc(e.usuario.nombre || e.usuario.id) + '</b>' +
+        '<span class="sp"></span><span class="muted" style="font-size:12.5px">' + moHace(e.t) + '</span></div>' +
+      '<div class="muted" style="font-size:13px;margin-top:2px"><span class="mono">' + esc(e.usuario.id) + '</span>' + (e.usuario.area ? ' · ' + esc(e.usuario.area) : '') + (e.nombre ? ' · ' + esc(e.nombre) : '') + ' · <b>' + esc(et) + '</b></div>' +
+      (e.items.length ? '<div style="margin-top:8px">' + e.items.map(i => '<div class="mon-it" style="cursor:default">' + moFoto(i) +
+        '<div style="flex:1;min-width:0"><div class="nm">' + esc(i.nombre) + '</div><div class="muted" style="font-size:12.5px"><span class="mono">' + esc(i.id) + '</span>' + (i.ubicacion ? ' · 📍 ' + esc(i.ubicacion) : '') + '</div></div>' +
+        '<div class="q">×' + i.cantidad + '</div></div>').join('') + '</div>' : '<div class="muted" style="margin-top:8px;font-size:14px">Aún no escanea nada.</div>') +
+      '</div>';
+  }).join('') : '<div class="card empty">Nadie está usando el kiosco.</div>';
+}
+function moMarcar(folio, id, sumar) {
+  const e = MO.data && MO.data.porEntregar.find(x => x.folio === folio); if (!e) return;
+  const it = e.items.find(i => idn(i.id) === idn(id)); if (!it) return;
+  const mk = MO.marcas[folio] = MO.marcas[folio] || {};
+  const v = mk[it.id] || 0;
+  mk[it.id] = sumar ? Math.min(v + 1, it.cantidad) : (v >= it.cantidad ? 0 : it.cantidad);
+  moPintar();
+}
+function moEscaneo(code) {
+  if (!MO.data) return;
+  const m = S.cat[idn(code)], id = m ? m.id : code;
+  // el préstamo más antiguo que todavía tenga pendiente ese equipo
+  const e = MO.data.porEntregar.find(x => x.items.some(i => idn(i.id) === idn(id) && ((MO.marcas[x.folio] || {})[i.id] || 0) < i.cantidad));
+  if (!e) { beep(false); toast('"' + code + '" no está en ningún préstamo por entregar.', 'err'); return; }
+  beep(true);
+  moMarcar(e.folio, id, true);
+}
+async function moEntregar(folio, b) {
+  const e = MO.data && MO.data.porEntregar.find(x => x.folio === folio); if (!e) return;
+  const mk = MO.marcas[folio] || {};
+  const faltan = e.items.filter(i => (mk[i.id] || 0) < i.cantidad);
+  if (faltan.length && !confirm('Faltan por palomear:\n• ' + faltan.map(i => i.nombre + ' ×' + (i.cantidad - (mk[i.id] || 0))).join('\n• ') + '\n\n¿Marcar como entregado de todos modos?')) return;
+  btnCarga(b, true, 'Guardando…');
+  try {
+    const r = await apiS('marcarEntregado', folio);
+    MO.data.porEntregar = r.porEntregar; delete MO.marcas[folio];
+    moPintar(); toast('Entregado a ' + e.usuario + '.', 'ok', 1800); enfocar('#mo-scan');
+  } catch (err) { btnCarga(b, false); toast(limpio(err), 'err'); }
 }
 
 // ═══════════════ PANEL (laboratorista) ═══════════════
@@ -1409,6 +1620,7 @@ lector($('#pd-art'), pdArticulo);
 lector($('#dv-usr'), dvBuscar);
 lector($('#dv-art'), dvArticulo);
 lector($('#cs-q'), csBuscar);
+lector($('#mo-scan'), moEscaneo);
 
 async function init() {
   if (!ES_GAS) $('#lnk-proto').style.display = '';

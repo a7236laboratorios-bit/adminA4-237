@@ -12,7 +12,7 @@
  * ════════════════════════════════════════════════════════════════════
  */
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 
 const HOJAS = {
   CONFIG: 'Configuración',
@@ -54,11 +54,12 @@ const CONFIG_DEFAULT = [
   ['URL_WEB', 'https://a7236laboratorios-bit.github.io/adminA4-237/inventario.html', 'Opcional. Página en GitHub Pages que usa esta hoja como backend.']
 ];
 
-const PAGINAS = ['pedir', 'devolver', 'catalogo', 'inicio', 'lockers', 'consulta', 'usuarios', 'etiquetas'];
+const PAGINAS = ['pedir', 'devolver', 'catalogo', 'solicitudes', 'inicio', 'lockers', 'consulta', 'usuarios', 'etiquetas'];
 const ALIAS_PAGINA = { prestamo: 'pedir', devolucion: 'devolver', visualizacion: 'lockers', 'catálogo': 'catalogo' };
 const NOMBRE_PAGINA = {
   pedir: 'Pedir material (autoservicio)', devolver: 'Devolver material (autoservicio)',
   catalogo: 'Catálogo de material (con foto y QR)',
+  solicitudes: 'Solicitudes en vivo (almacén)',
   inicio: 'Panel del laboratorista', lockers: 'Mapa de lockers', consulta: 'Consulta',
   usuarios: 'Usuarios', etiquetas: 'Etiquetas QR'
 };
@@ -112,10 +113,11 @@ function doGet(e) {
 const API_FUNCIONES = {
   // autoservicio
   getAppData, identificarUsuario, registrarUsuario, identificarParaDevolucion,
-  registrarPrestamo, registrarDevolucion, getLockers,
+  registrarPrestamo, registrarDevolucion, getLockers, kioscoEstado,
   // laboratorista
   validarLaboratorista, getResumen, buscarUsuario, prestamosDeUsuario, buscarParaDevolucion,
-  consultar, listarActivos, listarUsuarios, getUsuariosAdmin, guardarUsuario
+  consultar, listarActivos, listarUsuarios, getUsuariosAdmin, guardarUsuario,
+  getMonitor, marcarEntregado
 };
 
 function doPost(e) {
@@ -393,6 +395,13 @@ function registrarPrestamo(auth, p) {
 
     const md2 = actualizarMateriales_(cfg);
     const items = orden.map(id => ({ id: md.porId[id].id, nombre: md.porId[id].nombre, cantidad: pedidos[id] }));
+    try {
+      agregarEntrega_({
+        folio: String(filas[0][H.idMov]), movs: filas.map(f => String(f[H.idMov])), t: ahora.getTime(),
+        usuarioId: u.id, usuario: nombreU, area: u.area, kiosco: limpiaTxt_(p.kiosco, 40),
+        items: orden.map(id => { const m = md.porId[id]; return { id: m.id, nombre: m.nombre, cantidad: pedidos[id], ubicacion: m.ubicacion, imagen: m.imagen }; })
+      });
+    } catch (e) { /* la cola de entregas nunca debe frenar un préstamo */ }
     res = {
       ok: true, usuario: nombreU, usuarioId: u.id, items: items,
       fechaLimite: fmt_(limite, 'dd/MM/yyyy'), correo: '',
@@ -581,6 +590,114 @@ function listarUsuarios(auth) {
   verificarLab_(auth, cfg);
   const u = usuarios_(cfg);
   return Object.keys(u).map(k => ({ id: u[k].id, nombre: u[k].nombre, area: u[k].area }));
+}
+
+// ═════════════════ SOLICITUDES EN VIVO (almacén) ═════════════════
+//  · El kiosco avisa lo que el alumno va escaneando (kioscoEstado). Vive en
+//    CacheService unos minutos: no toca la hoja, es rápido.
+//  · Cada préstamo registrado entra a la cola "Por entregar" (Propiedades del
+//    script) hasta que un laboratorista lo marca como entregado.
+//  · getMonitor lo junta todo para la pantalla del almacén.
+
+const KQ_TTL = 900;            // segundos que dura el estado de un kiosco sin noticias
+const KQ_IDX = 'KQ_IDX';
+const ENTREGAS_KEY = 'ENTREGAS_PENDIENTES';
+const ENTREGAS_MAX = 60;
+
+function limpiaTxt_(v, max) { return String(v === null || v === undefined ? '' : v).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max || 120); }
+
+/** Público (kiosco). estado = null limpia; si no, {modo, etapa, usuario:{id,nombre,area}, items:[{id,nombre,cantidad,ubicacion,imagen}]} */
+function kioscoEstado(kid, estado) {
+  kid = String(kid || '').trim();
+  if (!/^[\w-]{1,40}$/.test(kid)) throw new Error('Kiosco inválido.');
+  const cache = CacheService.getScriptCache(), key = 'KQ_' + kid;
+  if (!estado) { cache.remove(key); return { ok: true }; }
+  const items = (Array.isArray(estado.items) ? estado.items : []).slice(0, 50).map(i => ({
+    id: limpiaTxt_(i && i.id, 60), nombre: limpiaTxt_(i && i.nombre, 120),
+    cantidad: Math.max(1, Math.min(999, Math.floor(Number(i && i.cantidad)) || 1)),
+    ubicacion: limpiaTxt_(i && i.ubicacion, 80), imagen: imagenUrl_(i && i.imagen)
+  })).filter(i => i.id);
+  const u = estado.usuario || {};
+  const e = {
+    kid: kid, nombre: limpiaTxt_(estado.kiosco, 40), t: Date.now(),
+    modo: estado.modo === 'devolver' ? 'devolver' : 'pedir',
+    etapa: limpiaTxt_(estado.etapa, 20) || 'escaneando',
+    usuario: { id: limpiaTxt_(u.id, 60), nombre: limpiaTxt_(u.nombre, 120), area: limpiaTxt_(u.area, 80) },
+    items: items
+  };
+  cache.put(key, JSON.stringify(e), KQ_TTL);
+  // índice de kioscos conocidos (pocos; si el candado está ocupado basta con el que ya existe)
+  const idx = JSON.parse(cache.get(KQ_IDX) || '[]');
+  if (idx.indexOf(kid) < 0) {
+    const lock = LockService.getScriptLock();
+    if (lock.tryLock(3000)) {
+      try {
+        const cur = JSON.parse(cache.get(KQ_IDX) || '[]');
+        if (cur.indexOf(kid) < 0) cur.push(kid);
+        cache.put(KQ_IDX, JSON.stringify(cur.slice(-20)), 21600);
+      } finally { lock.releaseLock(); }
+    }
+  }
+  return { ok: true };
+}
+
+function entregas_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(ENTREGAS_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+function guardarEntregas_(lista) {
+  let l = lista.slice(-ENTREGAS_MAX);
+  let txt = JSON.stringify(l);
+  while (txt.length > 8500 && l.length > 1) { l = l.slice(1); txt = JSON.stringify(l); }   // límite de 9 KB por propiedad
+  PropertiesService.getScriptProperties().setProperty(ENTREGAS_KEY, txt);
+}
+/** Se llama dentro del candado de registrarPrestamo. */
+function agregarEntrega_(e) {
+  e.items = e.items.map(i => ({ id: i.id, nombre: String(i.nombre).slice(0, 80), cantidad: i.cantidad, ubicacion: String(i.ubicacion || '').slice(0, 40), imagen: i.imagen && i.imagen.length < 300 ? i.imagen : '' }));
+  const l = entregas_();
+  l.push(e);
+  guardarEntregas_(l);
+}
+
+/** Pantalla del almacén: quién está escaneando ahora y qué falta entregar. */
+function getMonitor(auth) {
+  const cfg = getConfig_();
+  verificarLab_(auth, cfg);
+  const cache = CacheService.getScriptCache();
+  const idx = JSON.parse(cache.get(KQ_IDX) || '[]');
+  const vals = idx.length ? cache.getAll(idx.map(k => 'KQ_' + k)) : {};
+  const ahora = Date.now();
+  const enCurso = Object.keys(vals).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } })
+    .filter(e => e && ahora - e.t < KQ_TTL * 1000 && e.usuario && e.usuario.id)
+    .sort((a, b) => a.t - b.t);
+  return { ahora: ahora, enCurso: enCurso, porEntregar: entregas_() };
+}
+
+/** Quita un préstamo de la cola y anota en Historial quién lo entregó. */
+function marcarEntregado(auth, folio) {
+  const cfg = getConfig_();
+  const lab = verificarLab_(auth, cfg);
+  folio = String(folio || '').trim();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const l = entregas_();
+    const e = l.filter(x => x.folio === folio)[0];
+    if (!e) return { ok: true, yaEstaba: true, porEntregar: l };
+    const resto = l.filter(x => x.folio !== folio);
+    guardarEntregas_(resto);
+    try {
+      const th = tabla_(HOJAS.HISTORIAL), H = colsHist_(th);
+      if (H.entrego >= 0) {
+        const movs = {};
+        (e.movs || []).forEach(m => { movs[m] = 1; });
+        th.rows.forEach((r, i) => {
+          if (movs[String(r[H.idMov]).trim()]) th.sh.getRange(i + 2, H.entrego + 1).setValue(lab.nombre);
+        });
+      }
+    } catch (err) { /* la hoja es opcional para esta marca */ }
+    return { ok: true, porEntregar: resto };
+  } finally { lock.releaseLock(); }
 }
 
 // ════════════════════════════ MODELO ════════════════════════════
