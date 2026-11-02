@@ -146,6 +146,24 @@ table.t{width:100%;border-collapse:collapse}
 .spin{display:inline-block;width:16px;height:16px;border:2.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .qty{width:76px;text-align:center;padding:7px}
+/* ── Catálogo ── */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.cat-it{background:#fff;border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:transform .1s,box-shadow .1s}
+.cat-it:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.cat-it.off{opacity:.6}
+.cat-img{aspect-ratio:4/3;background:#f3f4f6;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cat-img img{width:100%;height:100%;object-fit:contain;background:#fff}
+.cat-img .ph{font-size:46px;opacity:.35}
+.cat-body{padding:10px 12px 12px;display:flex;gap:10px;align-items:flex-start;flex:1}
+.cat-body .tx{flex:1;min-width:0}
+.cat-body b{display:block;font-size:14.5px;line-height:1.25;word-break:break-word}
+.cat-body .sub{font-size:12px;color:var(--mut);margin-top:3px}
+.cat-qr{width:64px;height:64px;flex:none;background:#fff}
+.cat-qr svg{display:block;width:100%;height:100%}
+.cat-det .im{background:#f3f4f6;border-radius:12px;overflow:hidden;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+.cat-det .im img{width:100%;height:100%;object-fit:contain;background:#fff}
+.cat-det .qrbig{width:190px;height:190px;margin:4px auto 6px}
+.cat-det .qrbig svg{display:block;width:100%;height:100%}
 .labels{display:flex;flex-wrap:wrap;gap:3mm;padding:3mm;background:#fff}
 .label{border:1px dashed #9ca3af;padding:2mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;break-inside:avoid;page-break-inside:avoid;overflow:hidden}
 .label .qr svg,.label .qr img{display:block;width:100%;height:100%}
@@ -280,6 +298,21 @@ table.t{width:100%;border-collapse:collapse}
     </div>
   </section>
 
+  <!-- ═══════════ CATÁLOGO (público) ═══════════ -->
+  <section class="pg" id="pg-catalogo">
+    <div class="kiosk-title"><h1>🗂️ Catálogo de material</h1><p>Busca lo que necesitas. Para pedirlo, ve a <b>📤 Pedir</b> y escanea el QR del material (o el de esta página).</p></div>
+    <div class="card">
+      <div class="row">
+        <input id="ct-q" placeholder="Buscar por nombre, ID o categoría" style="flex:1;min-width:200px" oninput="ctPintar()">
+        <select id="ct-cat" style="max-width:200px" onchange="ctPintar()"></select>
+        <label style="display:flex;gap:6px;align-items:center;font-size:14px;white-space:nowrap"><input type="checkbox" id="ct-disp" style="width:auto" onchange="ctPintar()"> Solo disponibles</label>
+        <button class="btn sm" id="ct-ref" onclick="ctCargar(true)" title="Volver a leer la hoja">↻ Actualizar</button>
+      </div>
+      <div class="hint" id="ct-info"></div>
+    </div>
+    <div class="cat-grid" id="ct-grid"></div>
+  </section>
+
   <!-- ═══════════ CONSULTA ═══════════ -->
   <section class="pg" id="pg-consulta">
     <div class="card">
@@ -386,7 +419,7 @@ const VERSION_MIN = 2;   // (2.1 agrega reglamento obligatorio al registrarse)  
 
 const ES_GAS = !!(window.google && google.script && google.script.run);
 const _qs = new URLSearchParams(location.search);
-const ALIAS = { prestamo:'pedir', devolucion:'devolver', visualizacion:'lockers' };
+const ALIAS = { prestamo:'pedir', devolucion:'devolver', visualizacion:'lockers', 'catálogo':'catalogo' };
 const PAGINA_INICIAL = (function () {
   const srv = String(document.body.dataset.pagina || '');
   let p = /^[a-z]+$/.test(srv) ? srv : String(_qs.get('p') || location.hash.slice(1) || 'pedir').toLowerCase();
@@ -400,7 +433,8 @@ function apiUrl() {
 }
 
 const KIOSCO = { pedir:1, devolver:1 };
-const NAV_KIOSCO = [['pedir','📤 Pedir'],['devolver','📥 Devolver']];
+const NAV_KIOSCO = [['pedir','📤 Pedir'],['devolver','📥 Devolver'],['catalogo','🗂️ Catálogo']];
+const PUBLICA = { pedir:1, devolver:1, catalogo:1, lockers:1 };   // se ven sin sesión
 const NAV_ADMIN = [['inicio','Panel'],['lockers','Lockers'],['consulta','Consulta'],['usuarios','Usuarios'],['etiquetas','Etiquetas']];
 const PIDE_SESION = { inicio:1, consulta:1, usuarios:1, etiquetas:1 };   // lockers: sin sesión se ve sin datos personales
 const CMD = { REGISTRAR:'CMDREGISTRAR', CANCELAR:'CMDCANCELAR' };
@@ -522,7 +556,7 @@ function salir(motivo) {
   S.lab = ''; S.pin = ''; S.usuarios = null; S.usAdmin = null; guardarSesion(); pintarSesion();
   $('#cs-res').innerHTML = '';
   if (motivo) toast(motivo);
-  if (!KIOSCO[S.pg] && S.pg !== 'lockers') ir('pedir'); else if (S.pg === 'lockers') cargarLockers(true);
+  if (!PUBLICA[S.pg]) ir('pedir'); else if (S.pg === 'lockers') cargarLockers(true);
 }
 let _login = null;
 function pedirSesion() {
@@ -1106,6 +1140,85 @@ async function usGuardar(nuevo) {
 }
 
 // ═══════════════ ETIQUETAS ═══════════════
+// ═══════════════ CATÁLOGO (público, con foto y QR) ═══════════════
+// Lee la hoja cada vez que se abre (y cada minuto mientras está abierta), así que
+// lo que se agregue en Materiales aparece sin volver a publicar nada.
+PAGES.catalogo = { show() { ctPintar(); ctCargar(false); } };
+let _ctUlt = 0;
+async function ctCargar(manual) {
+  if (!manual && Date.now() - _ctUlt < 20000) return;
+  const b = $('#ct-ref');
+  if (manual) btnCarga(b, true, 'Actualizando…');
+  try {
+    const r = await api('getResumen');
+    setCatalogo(r.materiales);
+    if (r.resumen) S.data.resumen = r.resumen;
+    _ctUlt = Date.now();
+    ctPintar();
+    if (manual) toast('Catálogo actualizado.', 'ok', 1500);
+  } catch (e) { if (manual) toast(limpio(e), 'err'); }
+  finally { if (manual) btnCarga(b, false); }
+}
+setInterval(() => { if (S.pg === 'catalogo' && !document.hidden) ctCargar(false); }, 60000);
+function ctLista() {
+  const lk = idn(S.data.config.categoriaLocker || 'Locker');
+  return S.data.materiales.filter(m => idn(m.categoria) !== lk);
+}
+function ctDisp(m) {
+  if (m.total <= 0) return '<span class="badge b-mut">Sin existencias</span>';
+  if (m.disponible <= 0) return '<span class="badge b-err">' + (m.total > 1 ? 'Agotado' : 'Prestado') + '</span>';
+  return '<span class="badge b-ok">' + (m.total > 1 ? m.disponible + ' de ' + m.total + ' disponibles' : 'Disponible') + '</span>';
+}
+function ctImg(m) {
+  return m.imagen
+    ? '<img loading="lazy" referrerpolicy="no-referrer" alt="' + esc(m.nombre) + '" src="' + esc(m.imagen) + '" onerror="this.outerHTML=\'<span class=ph>📦</span>\'">'
+    : '<span class="ph">📦</span>';
+}
+function ctQr(id) {
+  if (typeof qrcode !== 'function') return '';
+  const q = qrcode(0, 'M'); q.addData(String(id)); q.make();
+  return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+}
+async function ctPintar() {
+  const todos = ctLista();
+  const sel = $('#ct-cat'), prev = sel.value;
+  const cats = Array.from(new Set(todos.map(m => m.categoria).filter(Boolean))).sort();
+  sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => '<option>' + esc(c) + '</option>').join('');
+  if (cats.indexOf(prev) >= 0) sel.value = prev;
+  const q = idn($('#ct-q').value), cat = sel.value, solo = $('#ct-disp').checked;
+  const v = todos.filter(m => (!cat || m.categoria === cat) && (!solo || m.disponible > 0) &&
+    (!q || [m.nombre, m.id, m.categoria, m.serie].some(x => idn(x).indexOf(q) >= 0)))
+    .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+  const conFoto = todos.filter(m => m.imagen).length;
+  $('#ct-info').textContent = v.length + ' de ' + todos.length + ' materiales' + (todos.length ? ' · ' + conFoto + ' con foto' : '');
+  try { await cargarLib(LIB_QR); } catch (e) { /* sin QR si no hay internet */ }
+  $('#ct-grid').innerHTML = v.length ? v.map(m =>
+    '<div class="cat-it' + (m.disponible > 0 ? '' : ' off') + '" onclick="ctVer(' + js(m.id) + ')">' +
+      '<div class="cat-img">' + ctImg(m) + '</div>' +
+      '<div class="cat-body"><div class="tx"><b>' + esc(m.nombre) + '</b>' +
+        '<div class="sub mono">' + esc(m.id) + '</div>' +
+        (m.categoria ? '<div class="sub">' + esc(m.categoria) + '</div>' : '') +
+        '<div style="margin-top:6px">' + ctDisp(m) + '</div></div>' +
+        '<div class="cat-qr">' + ctQr(m.id) + '</div></div>' +
+    '</div>').join('')
+    : '<div class="card empty" style="grid-column:1/-1">' + (todos.length ? 'Nada coincide con la búsqueda.' : 'Todavía no hay materiales en la hoja.') + '</div>';
+}
+function ctVer(id) {
+  const m = S.cat[idn(id)];
+  if (!m) return;
+  $('#m-info-c').innerHTML = '<div class="cat-det">' +
+    '<div class="im">' + ctImg(m) + '</div>' +
+    '<h2 style="margin-bottom:4px">' + esc(m.nombre) + '</h2>' +
+    '<div class="muted mono" style="font-size:13px">' + esc(m.id) + sn(m.serie) + '</div>' +
+    '<div class="row" style="margin-top:8px">' + ctDisp(m) + (m.categoria ? '<span class="badge b-mut">' + esc(m.categoria) + '</span>' : '') +
+      (m.ubicacion ? '<span class="badge b-inf">📍 ' + esc(m.ubicacion) + '</span>' : '') + '</div>' +
+    '<div class="qrbig">' + ctQr(m.id) + '</div>' +
+    '<p class="muted" style="text-align:center;margin:0">Para pedirlo: ve a <b>📤 Pedir</b>, escanea tu credencial y luego este QR.</p>' +
+    '<div class="row" style="margin-top:16px"><span class="sp"></span><button class="btn" onclick="cerrar(\'#m-info\')">Cerrar</button>' +
+    '<button class="btn pri" onclick="cerrar(\'#m-info\');ir(\'pedir\')">📤 Ir a Pedir</button></div></div>';
+  abrir('#m-info');
+}
+
 PAGES.etiquetas = { show() { etCargar(); } };
 let ET = [];
 async function etCargar() {

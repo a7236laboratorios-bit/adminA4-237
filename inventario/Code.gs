@@ -12,7 +12,7 @@
  * ════════════════════════════════════════════════════════════════════
  */
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 const HOJAS = {
   CONFIG: 'Configuración',
@@ -26,7 +26,7 @@ const HOJAS = {
  *  reordenarlas o agregar columnas propias sin romper nada. */
 const COLUMNAS = {
   [HOJAS.CONFIG]: ['Clave', 'Valor', 'Descripción'],
-  [HOJAS.MATERIALES]: ['ID', 'Nombre', 'No. de serie', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas'],
+  [HOJAS.MATERIALES]: ['ID', 'Nombre', 'No. de serie', 'Categoría', 'Ubicación', 'Cantidad total', 'Disponible', 'Estatus', 'Notas', 'Imagen'],
   [HOJAS.USUARIOS]: ['ID', 'Nombre', 'Correo', 'Área', 'Estatus', 'Notas', 'Reglamento'],
   [HOJAS.LABS]: ['Nombre', 'PIN', 'Correo', 'Activo', 'Notas'],
   [HOJAS.HISTORIAL]: ['ID Movimiento', 'Fecha préstamo', 'ID Material', 'Material', 'No. de serie', 'ID Usuario', 'Usuario', 'Correo', 'Área',
@@ -54,10 +54,11 @@ const CONFIG_DEFAULT = [
   ['URL_WEB', 'https://a7236laboratorios-bit.github.io/adminA4-237/inventario.html', 'Opcional. Página en GitHub Pages que usa esta hoja como backend.']
 ];
 
-const PAGINAS = ['pedir', 'devolver', 'inicio', 'lockers', 'consulta', 'usuarios', 'etiquetas'];
-const ALIAS_PAGINA = { prestamo: 'pedir', devolucion: 'devolver', visualizacion: 'lockers' };
+const PAGINAS = ['pedir', 'devolver', 'catalogo', 'inicio', 'lockers', 'consulta', 'usuarios', 'etiquetas'];
+const ALIAS_PAGINA = { prestamo: 'pedir', devolucion: 'devolver', visualizacion: 'lockers', 'catálogo': 'catalogo' };
 const NOMBRE_PAGINA = {
   pedir: 'Pedir material (autoservicio)', devolver: 'Devolver material (autoservicio)',
+  catalogo: 'Catálogo de material (con foto y QR)',
   inicio: 'Panel del laboratorista', lockers: 'Mapa de lockers', consulta: 'Consulta',
   usuarios: 'Usuarios', etiquetas: 'Etiquetas QR'
 };
@@ -590,7 +591,8 @@ function modelo_(cfg) {
   const tm = tabla_(HOJAS.MATERIALES);
   const M = {
     id: tm.c('ID'), nombre: tm.c('Nombre'), cat: tm.c('Categoría', true),
-    ubi: tm.c('Ubicación', true), total: tm.c('Cantidad total', true), serie: tm.c('No. de serie', true)
+    ubi: tm.c('Ubicación', true), total: tm.c('Cantidad total', true), serie: tm.c('No. de serie', true),
+    img: tm.c('Imagen', true)
   };
   const materiales = [], porId = {}, duplicados = [];
   tm.rows.forEach((r, i) => {
@@ -604,6 +606,7 @@ function modelo_(cfg) {
       categoria: String(cel_(r, M.cat)).trim(),
       ubicacion: String(cel_(r, M.ubi)).trim(),
       serie: String(cel_(r, M.serie)).trim(),
+      imagen: imagenUrl_(cel_(r, M.img)),
       total: Math.max(0, num_(cel_(r, M.total), 1)),
       prestado: 0
     };
@@ -805,7 +808,7 @@ function resumen_(md) {
 
 function matPub_(m) {
   return {
-    id: m.id, nombre: m.nombre, serie: m.serie, categoria: m.categoria, ubicacion: m.ubicacion,
+    id: m.id, nombre: m.nombre, serie: m.serie, categoria: m.categoria, ubicacion: m.ubicacion, imagen: m.imagen,
     total: m.total, prestado: m.prestado, disponible: m.disponible, estatus: m.estatus
   };
 }
@@ -1097,7 +1100,7 @@ function darFormato_(sh, nombre) {
       break;
 
     case HOJAS.MATERIALES: {
-      anchos([110, 240, 150, 130, 130, 110, 100, 120, 200]);
+      anchos([110, 240, 150, 130, 130, 110, 100, 120, 200, 260]);
       rango('No. de serie').setNumberFormat('@');
       sh.getRange(1, col('No. de serie')).setNote('Número de serie del fabricante. Opcional; si tiene código de barras también se puede escanear.');
       rango('ID').setNumberFormat('@');
@@ -1107,6 +1110,7 @@ function darFormato_(sh, nombre) {
       sh.getRange(1, col('Disponible')).setNote('Lo calcula el sistema. No lo edites.');
       sh.getRange(1, col('Estatus')).setNote('Lo calcula el sistema. No lo edites.');
       sh.getRange(1, col('Cantidad total')).setNote('Piezas que existen con este ID. Vacío = 1.');
+      sh.getRange(1, col('Imagen')).setNote('Opcional. Enlace (https) a una foto del material; se muestra en el Catálogo. También acepta enlaces de Google Drive compartidos como "Cualquier persona con el enlace".');
       const r = rango('Estatus');
       sh.setConditionalFormatRules([
         regla(r, 'Disponible', '#dcfce7', '#166534'),
@@ -1162,14 +1166,14 @@ function datosEjemplo_(sh, nombre) {
   let filas = [];
   if (nombre === HOJAS.MATERIALES) {
     filas = [
-      ['MAT001', 'Multímetro digital', '', 'Electrónica', 'Estante A1', 5, '', '', E],
-      ['MAT002', 'Osciloscopio 2 canales', 'TDS2002C0042', 'Electrónica', 'Mesa 2', 1, '', '', E],
-      ['MAT003', 'Cautín 60 W', '', 'Electrónica', 'Estante A2', 8, '', '', E],
-      ['MAT004', 'Vernier digital', '', 'Metrología', 'Cajón B1', 6, '', '', E],
-      ['MAT005', 'Taladro inalámbrico', 'DCD7713305', 'Herramienta', 'Gabinete C', 1, '', '', E],
-      ['MAT006', 'Kit Arduino UNO', '', 'Electrónica', 'Estante A3', 10, '', '', E]
+      ['MAT001', 'Multímetro digital', '', 'Electrónica', 'Estante A1', 5, '', '', E, ''],
+      ['MAT002', 'Osciloscopio 2 canales', 'TDS2002C0042', 'Electrónica', 'Mesa 2', 1, '', '', E, ''],
+      ['MAT003', 'Cautín 60 W', '', 'Electrónica', 'Estante A2', 8, '', '', E, ''],
+      ['MAT004', 'Vernier digital', '', 'Metrología', 'Cajón B1', 6, '', '', E, ''],
+      ['MAT005', 'Taladro inalámbrico', 'DCD7713305', 'Herramienta', 'Gabinete C', 1, '', '', E, ''],
+      ['MAT006', 'Kit Arduino UNO', '', 'Electrónica', 'Estante A3', 10, '', '', E, '']
     ];
-    for (let i = 1; i <= 12; i++) filas.push(['L' + i, 'Locker ' + i, '', 'Locker', 'Pasillo', 1, '', '', E]);
+    for (let i = 1; i <= 12; i++) filas.push(['L' + i, 'Locker ' + i, '', 'Locker', 'Pasillo', 1, '', '', E, '']);
   } else if (nombre === HOJAS.USUARIOS) {
     filas = [
       ['A00000001', 'Ana López Ruiz', 'ana.lopez@example.com', 'Mecatrónica', 'Activo', E],
@@ -1219,6 +1223,17 @@ function tabla_(nombre) {
   };
 }
 
+/** Normaliza el enlace de la columna Imagen. Solo https; los enlaces de Google Drive
+ *  ("…/file/d/ID/view", "open?id=ID", "uc?id=ID") se convierten a su miniatura pública. */
+function imagenUrl_(v) {
+  let u = String(v === null || v === undefined ? '' : v).trim();
+  const f = /=\s*IMAGE\(\s*"([^"]+)"/i.exec(u);   // por si pegan la fórmula =IMAGE("…")
+  if (f) u = f[1];
+  if (!/^https:\/\//i.test(u)) return '';
+  const d = /drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=|thumbnail\?(?:[^#]*&)?id=)([\w-]{20,})/i.exec(u);
+  if (d) return 'https://drive.google.com/thumbnail?id=' + d[1] + '&sz=w800';
+  return u.slice(0, 1000);
+}
 function cel_(r, i) { return i < 0 ? '' : r[i]; }
 function norm_(s) { return String(s === null || s === undefined ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(); }
 function id_(v) { return String(v === null || v === undefined ? '' : v).trim().toUpperCase(); }

@@ -59,7 +59,18 @@ Por defecto `AUTORIZAR_PRESTAMO = No` y `AUTORIZAR_DEVOLUCION = Sí`. Puedes cam
 4. Pégala en `inventario.html`, en la línea `const DEFAULT_API_URL = "";`, y súbelo a GitHub.
    *Atajo sin editar código:* abre una vez `https://a7236laboratorios-bit.github.io/adminA4-237/inventario.html?api=TU_URL_EXEC` y queda guardada en ese navegador.
 
-Enlaces directos: `inventario.html?p=pedir` (kiosco, página por defecto), `?p=devolver`, `?p=lockers` (vista pública sin nombres, útil para una pantalla en la pared), `?p=inicio`, `?p=consulta`, `?p=usuarios`, `?p=etiquetas`. Los enlaces viejos `?p=prestamo` y `?p=devolucion` siguen funcionando.
+## 🗂️ Catálogo con foto y QR (v2.3)
+
+Página **pública** (no pide contraseña) donde los usuarios ven todo el material con su **foto**, su **QR** y si está disponible. Sirve para que sepan exactamente qué piden. Enlace: `inventario.html?p=catalogo` (también aparece en el menú como **🗂️ Catálogo**).
+
+- **Fotos:** en la hoja *Materiales* hay una columna nueva, **Imagen**. Pega ahí el enlace (https) de una foto de internet. También acepta enlaces de Google Drive si el archivo está compartido como *Cualquier persona con el enlace*. Si la celda está vacía o el enlace no abre, se muestra un 📦.
+- **Sobre la marcha:** el catálogo lee la hoja cada vez que se abre y cada minuto mientras está abierto (o con **↻ Actualizar**). Lo que agregues o cambies en *Materiales* aparece solo, sin volver a publicar.
+- Al tocar un material se abre su ficha con la foto grande, la ubicación y el QR grande. Ese QR se puede escanear en **📤 Pedir** igual que la etiqueta pegada en el equipo.
+- Los lockers (categoría `CATEGORIA_LOCKER`) no salen en el catálogo.
+
+**Para activarlo** (una vez): pega el nuevo `inventario/Code.gs` en el proyecto de Apps Script del Inventario, guarda, corre **📦 Almacén › Instalar / reparar plantilla** (agrega la columna *Imagen* al final de *Materiales* sin borrar nada) y publica una **Nueva versión** de la implementación.
+
+Enlaces directos: `inventario.html?p=pedir` (kiosco, página por defecto), `?p=devolver`, `?p=catalogo` (catálogo público con foto y QR), `?p=lockers` (vista pública sin nombres, útil para una pantalla en la pared), `?p=inicio`, `?p=consulta`, `?p=usuarios`, `?p=etiquetas`. Los enlaces viejos `?p=prestamo` y `?p=devolucion` siguen funcionando.
 
 `inventario.html` es una **copia idéntica** de `inventario/App.html`: el mismo archivo funciona dentro de Apps Script y en GitHub Pages. Si editas uno, cópialo al otro con `cp inventario/App.html inventario.html`.
 
