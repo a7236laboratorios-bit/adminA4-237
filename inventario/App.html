@@ -89,6 +89,24 @@ table.t{width:100%;border-collapse:collapse}
 .kiosk-title{text-align:center;margin:6px 0 18px}
 .kiosk-title h1{font-size:26px;margin:0}
 .kiosk-title p{margin:6px 0 0;color:var(--mut)}
+/* ── ¿Dónde estoy? Pedir = verde · Devolver = naranja ── */
+:root{--pedir:#15803d;--pedir-l:#dcfce7;--devolver:#c2410c;--devolver-l:#ffedd5}
+.modo{display:none;align-items:center;justify-content:center;gap:12px;padding:10px 16px;color:#fff;font-weight:800;font-size:20px;letter-spacing:.5px;text-align:center}
+.modo small{font-weight:600;font-size:14px;opacity:.92;letter-spacing:0}
+body.m-pedir .modo,body.m-devolver .modo{display:flex}
+body.m-pedir .modo{background:var(--pedir)}
+body.m-devolver .modo{background:var(--devolver)}
+body.m-pedir{background:var(--pedir-l)}
+body.m-devolver{background:var(--devolver-l)}
+body.m-pedir .card.paso{border-left:8px solid var(--pedir)}
+body.m-devolver .card.paso{border-left:8px solid var(--devolver)}
+body.m-pedir .kiosk-title h1{color:var(--pedir)}
+body.m-devolver .kiosk-title h1{color:var(--devolver)}
+body.m-pedir input.big:focus{border-color:var(--pedir);box-shadow:0 0 0 4px color-mix(in srgb,var(--pedir) 25%,transparent)}
+body.m-devolver input.big:focus{border-color:var(--devolver);box-shadow:0 0 0 4px color-mix(in srgb,var(--devolver) 25%,transparent)}
+nav button[data-p=pedir].on{background:var(--pedir);box-shadow:0 0 0 2px #fff inset}
+nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #fff inset}
+@media (max-width:600px){.modo{font-size:16px;flex-direction:column;gap:2px}}
 .steps{display:flex;gap:8px;margin-bottom:16px}
 .steps div{flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:#fff;border:1.5px solid var(--bd);color:var(--mut);font-size:13.5px;font-weight:600}
 .steps b{display:inline-flex;width:26px;height:26px;border-radius:50%;background:#e5e7eb;color:#4b5563;align-items:center;justify-content:center;font-size:13px;flex:none}
@@ -241,6 +259,7 @@ table.t{width:100%;border-collapse:collapse}
     <a class="central" id="lnk-proto" href="admin.html" title="Panel de Prototipado (impresión 3D, láser, PCB)" style="display:none">🖨️ Prototipado</a>
     <div class="sesion" id="sesion"></div>
   </div>
+  <div class="modo" id="modo"></div>
 </header>
 <div class="banner" id="banner"></div>
 
@@ -259,7 +278,7 @@ table.t{width:100%;border-collapse:collapse}
       <div class="card paso" id="pd-c1">
         <h2>Escanea tu credencial</h2>
         <div class="scan">
-          <input id="pd-usr" class="big" placeholder="Escribe tu matrícula (con L mayúscula)" autocomplete="off" spellcheck="false">
+          <input id="pd-usr" class="big" placeholder="📤 PEDIR · Tu matrícula (con L mayúscula)" autocomplete="off" spellcheck="false">
           <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(pdUsuario)">📷</button>
         </div>
         <div id="pd-uinfo"></div>
@@ -267,7 +286,7 @@ table.t{width:100%;border-collapse:collapse}
       <div class="card paso off" id="pd-c2">
         <h2>Escanea cada equipo</h2>
         <div class="scan">
-          <input id="pd-art" class="big" placeholder="Escanea el código del equipo" autocomplete="off" spellcheck="false">
+          <input id="pd-art" class="big" placeholder="📤 PEDIR · Escanea el equipo que te llevas" autocomplete="off" spellcheck="false">
           <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(pdArticulo)">📷</button>
         </div>
         <div class="hint">Si te llevas varias piezas iguales, escanéalo varias veces o cambia la cantidad.<br>También puedes <b>arrastrar aquí la foto</b> de un material desde el 🗂️ Catálogo (abierto en otra ventana o pestaña).</div>
@@ -295,7 +314,7 @@ table.t{width:100%;border-collapse:collapse}
       <div class="card paso" id="dv-c1">
         <h2>Escanea tu credencial o un equipo</h2>
         <div class="scan">
-          <input id="dv-usr" class="big" placeholder="Credencial o equipo que traes" autocomplete="off" spellcheck="false">
+          <input id="dv-usr" class="big" placeholder="📥 DEVOLVER · Credencial o equipo" autocomplete="off" spellcheck="false">
           <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(dvBuscar)">📷</button>
         </div>
         <div id="dv-uinfo"></div>
@@ -303,7 +322,7 @@ table.t{width:100%;border-collapse:collapse}
       <div class="card paso off" id="dv-c2">
         <div class="row"><h2 style="margin:0">Escanea cada equipo que regresas</h2><span class="sp"></span><button class="btn sm" onclick="dvTodo()">Devuelvo todo</button></div>
         <div class="scan" style="margin-top:12px">
-          <input id="dv-art" class="big" placeholder="Escanea el código del equipo" autocomplete="off" spellcheck="false">
+          <input id="dv-art" class="big" placeholder="📥 DEVOLVER · Escanea el equipo que regresas" autocomplete="off" spellcheck="false">
           <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(dvArticulo)">📷</button>
         </div>
         <div class="tw" style="margin-top:12px"><table class="t" id="dv-tabla"></table></div>
@@ -628,6 +647,13 @@ function pintarSesion() {
     : '<button class="ghost" onclick="pedirSesion()">🔐 Laboratorista</button>';
   pintarNav();
 }
+/** Franja de color que dice claramente si estás pidiendo o devolviendo. */
+function pintarModo() {
+  document.body.classList.toggle('m-pedir', S.pg === 'pedir');
+  document.body.classList.toggle('m-devolver', S.pg === 'devolver');
+  $('#modo').innerHTML = S.pg === 'pedir' ? '📤 ESTÁS EN: PEDIR MATERIAL <small>(te lo llevas)</small>'
+    : S.pg === 'devolver' ? '📥 ESTÁS EN: DEVOLVER MATERIAL <small>(lo regresas)</small>' : '';
+}
 function pintarNav() {
   const b = n => '<button data-p="' + n[0] + '" onclick="ir(\'' + n[0] + '\')"' + (S.pg === n[0] ? ' class="on"' : '') + '>' + n[1] + '</button>';
   $('#nav').innerHTML = NAV_KIOSCO.map(b).join('') + (S.lab ? '<span class="sep"></span>' + NAV_ADMIN.map(b).join('') : '');
@@ -689,6 +715,7 @@ async function ir(p) {
   }
   S.pg = p;
   $$('.pg').forEach(x => x.classList.toggle('on', x.id === 'pg-' + p));
+  pintarModo();
   pintarNav();
   if (!ES_GAS) { try { const u = new URL(location.href); u.searchParams.delete('api'); u.searchParams.set('p', p); u.hash = ''; history.replaceState(null, '', u); } catch (e) {} }
   if (PAGES[p].show) PAGES[p].show();
@@ -799,6 +826,14 @@ PAGES.pedir = { show() { pasos('pd', P.u && P.u.puedePrestar ? 2 : 1); pdPintar(
 async function pdUsuario(code) {
   const c = esCmd(code); if (c) return pdComando(c);
   const box = $('#pd-uinfo');
+  const eq = S.cat[idn(code)];
+  if (eq) {
+    beep(false);
+    box.innerHTML = '<div class="alert err">Escaneaste un <b>equipo</b> (' + esc(eq.nombre) + '), pero estás en <b>📤 PEDIR</b>. Aquí primero va tu credencial.' +
+      '<div class="row" style="margin-top:10px"><button class="btn" onclick="$(\'#pd-uinfo\').innerHTML=\'\';enfocar(\'#pd-usr\')">Me equivoqué, quiero pedir</button><span class="sp"></span>' +
+      '<button class="btn pri" style="background:var(--devolver);border-color:var(--devolver)" onclick="irDevolverCon(' + js(code) + ')">📥 Lo quiero devolver</button></div></div>';
+    return;
+  }
   box.innerHTML = cargando('Buscando tu credencial…');
   P.items = [];
   try {
@@ -948,6 +983,7 @@ async function pdTerminar() {
 // ═══════════════ DEVOLVER (autoservicio) ═══════════════
 PAGES.devolver = { show() { pasos('dv', D.u ? 2 : 1); dvPintar(); focoPagina(); } };
 
+function irDevolverCon(code) { $('#pd-uinfo').innerHTML = ''; ir('devolver'); dvBuscar(code); }
 async function dvBuscar(code) {
   const c = esCmd(code); if (c) return dvComando(c);
   const box = $('#dv-uinfo');
@@ -966,7 +1002,8 @@ function dvCargar(u) {
   D.u = u;
   D.lin = u.activos.map(a => Object.assign({ devolver: 0 }, a));
   if (!u.activos.length) {
-    $('#dv-uinfo').innerHTML = tarjetaUsuario(u) + '<div class="alert ok">No tienes material pendiente por devolver. 👍</div>';
+    $('#dv-uinfo').innerHTML = tarjetaUsuario(u) + '<div class="alert ok">No tienes material pendiente por devolver. 👍 Estás en <b>📥 DEVOLVER</b>.' +
+      '<div class="row" style="margin-top:10px"><span class="sp"></span><button class="btn pri" style="background:var(--pedir);border-color:var(--pedir)" onclick="$(\'#dv-uinfo\').innerHTML=\'\';ir(\'pedir\')">📤 Quiero pedir material</button></div></div>';
     D.u = null; D.lin = []; pasos('dv', 1); dvPintar(); enfocar('#dv-usr');
     return;
   }
