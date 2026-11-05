@@ -151,6 +151,9 @@ table.t{width:100%;border-collapse:collapse}
 .cat-it{background:#fff;border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:transform .1s,box-shadow .1s}
 .cat-it:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.08)}
 .cat-it.off{opacity:.6}
+.cat-it[draggable=true]{cursor:grab}
+.cat-it img{-webkit-user-drag:none;pointer-events:none}
+.soltar{outline:3px dashed var(--pri,#2563eb);outline-offset:4px;background:rgba(37,99,235,.06)}
 .cat-img{aspect-ratio:4/3;background:#f3f4f6;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .cat-img img{width:100%;height:100%;object-fit:contain;background:#fff}
 .cat-img .ph{font-size:46px;opacity:.35}
@@ -267,7 +270,7 @@ table.t{width:100%;border-collapse:collapse}
           <input id="pd-art" class="big" placeholder="Escanea el código del equipo" autocomplete="off" spellcheck="false">
           <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(pdArticulo)">📷</button>
         </div>
-        <div class="hint">Si te llevas varias piezas iguales, escanéalo varias veces o cambia la cantidad.</div>
+        <div class="hint">Si te llevas varias piezas iguales, escanéalo varias veces o cambia la cantidad.<br>También puedes <b>arrastrar aquí la foto</b> de un material desde el 🗂️ Catálogo (abierto en otra ventana o pestaña).</div>
         <div class="tw" style="margin-top:12px"><table class="t" id="pd-tabla"></table></div>
         <label class="lb" for="pd-notas">Comentario (opcional)</label>
         <textarea id="pd-notas" rows="1" placeholder="Ej. práctica 3, equipo 5"></textarea>
@@ -1115,7 +1118,7 @@ function moNovedades() {
 }
 function moAviso(txt) {
   toast(txt, 'ok', 6000);
-  if (MO.sonido) { beep(true); setTimeout(() => beep(true), 180); setTimeout(() => beep(true), 360); }
+  if (MO.sonido) alarmaSonar();
   try { if (MO.sonido && window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('Almacén A7-237', { body: txt }); } catch (e) {}
   const t0 = document.title; let n = 0;
   const iv = setInterval(() => { document.title = n++ % 2 ? t0 : '🔔 ' + txt.split('\n')[0]; if (n > 9) { clearInterval(iv); document.title = t0; } }, 900);
@@ -1124,8 +1127,76 @@ function moSonido() {
   MO.sonido = !MO.sonido;
   $('#mo-son').textContent = MO.sonido ? '🔔 Aviso activado' : '🔔 Activar aviso';
   $('#mo-son').classList.toggle('pri', MO.sonido);
-  if (MO.sonido) { beep(true); try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {} }
+  if (MO.sonido) {
+    alarmaDesbloquear();   // se toca dentro del clic para que el celular permita el audio después
+    pantallaEncendida(true);
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  } else { alarmaParar(); pantallaEncendida(false); }
 }
+
+// ── Alarma fuerte para avisar al laboratorista ──
+// Se genera un WAV en memoria y se reproduce con <audio> (no con Web Audio):
+// así suena a todo volumen y en iPhone suena aunque el switch de silencio esté puesto.
+const ALARMA = { audio:null, rep:null, fin:0 };
+function alarmaWav() {
+  const sr = 22050, notas = [[880,.16],[0,.04],[1175,.16],[0,.04],[1568,.28],[0,.12],[880,.16],[0,.04],[1175,.16],[0,.04],[1568,.28],[0,.3]];
+  const total = Math.round(notas.reduce((a, n) => a + n[1], 0) * sr);
+  const buf = new ArrayBuffer(44 + total * 2), v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + total * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, total * 2, true);
+  let k = 0;
+  notas.forEach(([f, d]) => {
+    const n = Math.round(d * sr);
+    for (let i = 0; i < n; i++, k++) {
+      let x = 0;
+      if (f) {
+        const t = i / sr, env = Math.min(1, i / 200, (n - i) / 400);
+        // onda casi cuadrada (fundamental + armónicos impares) = sonido penetrante, se oye en bocinas de celular
+        x = (Math.sin(2*Math.PI*f*t) + Math.sin(6*Math.PI*f*t) / 3 + Math.sin(10*Math.PI*f*t) / 5) * 0.85 * env;
+      }
+      v.setInt16(44 + k * 2, Math.max(-1, Math.min(1, x)) * 32767, true);
+    }
+  });
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function alarmaAudio() {
+  if (!ALARMA.audio) { ALARMA.audio = new Audio(alarmaWav()); ALARMA.audio.volume = 1; ALARMA.audio.preload = 'auto'; }
+  return ALARMA.audio;
+}
+function alarmaDesbloquear() {
+  const a = alarmaAudio();
+  try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function alarmaSonar() {
+  // Suena cada 2.5 s hasta que el laboratorista toque la pantalla o presione una tecla (máx. 30 s)
+  ALARMA.fin = Date.now() + 30000;
+  const una = () => {
+    if (Date.now() > ALARMA.fin) return alarmaParar();
+    try { const a = alarmaAudio(); a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => beep(true)); } catch (e) { beep(true); }
+    try { if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 600]); } catch (e) {}
+  };
+  if (!ALARMA.rep) {
+    ALARMA.rep = setInterval(una, 2500);
+    setTimeout(() => { ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, alarmaParar, { once: true })); }, 600);
+  }
+  una();
+}
+function alarmaParar() {
+  clearInterval(ALARMA.rep); ALARMA.rep = null;
+  ['pointerdown', 'keydown'].forEach(ev => document.removeEventListener(ev, alarmaParar));
+}
+// Mantiene la pantalla del celular encendida mientras el aviso esté activado (si se apaga, el navegador deja de revisar)
+let WL = null;
+async function pantallaEncendida(on) {
+  try {
+    if (on && navigator.wakeLock && !WL) { WL = await navigator.wakeLock.request('screen'); WL.addEventListener('release', () => { WL = null; }); }
+    if (!on && WL) { await WL.release(); WL = null; }
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && MO.sonido) pantallaEncendida(true); });
 function moHace(t) {
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
   return s < 60 ? 'hace ' + s + ' s' : s < 3600 ? 'hace ' + Math.round(s / 60) + ' min' : 'hace ' + Math.round(s / 3600) + ' h';
@@ -1428,7 +1499,7 @@ async function ctPintar() {
   $('#ct-info').textContent = v.length + ' de ' + todos.length + ' materiales' + (todos.length ? ' · ' + conFoto + ' con foto' : '');
   try { await cargarLib(LIB_QR); } catch (e) { /* sin QR si no hay internet */ }
   $('#ct-grid').innerHTML = v.length ? v.map(m =>
-    '<div class="cat-it' + (m.disponible > 0 ? '' : ' off') + '" onclick="ctVer(' + js(m.id) + ')">' +
+    '<div class="cat-it' + (m.disponible > 0 ? '' : ' off') + '" draggable="true" data-id="' + esc(m.id) + '" ondragstart="ctArrastrar(event)" onclick="ctVer(' + js(m.id) + ')">' +
       '<div class="cat-img">' + ctImg(m) + '</div>' +
       '<div class="cat-body"><div class="tx"><b>' + esc(m.nombre) + '</b>' +
         '<div class="sub mono">' + esc(m.id) + '</div>' +
@@ -1437,6 +1508,50 @@ async function ctPintar() {
         '<div class="cat-qr">' + ctQr(m.id) + '</div></div>' +
     '</div>').join('')
     : '<div class="card empty" style="grid-column:1/-1">' + (todos.length ? 'Nada coincide con la búsqueda.' : 'Todavía no hay materiales en la hoja.') + '</div>';
+}
+// Al arrastrar una tarjeta se manda el CÓDIGO del material (no el link de la foto),
+// para soltarla en 📤 Pedir aunque esté en otra ventana o pestaña.
+function ctArrastrar(ev) {
+  const el = ev.target.closest && ev.target.closest('.cat-it');
+  const id = el && el.getAttribute('data-id');
+  if (!id) return;
+  ev.dataTransfer.clearData();
+  ev.dataTransfer.setData('text/plain', id);
+  ev.dataTransfer.setData('application/x-a7-material', id);
+  ev.dataTransfer.effectAllowed = 'copy';
+  const img = el.querySelector('img');
+  if (img && img.complete && img.naturalWidth) try { ev.dataTransfer.setDragImage(img, 40, 40); } catch (e) {}
+}
+/** Convierte lo que se soltó (código, o el link de una foto del catálogo) en el código del material. */
+function codigoSoltado(dt) {
+  const v = (dt.getData('application/x-a7-material') || '').trim();
+  if (v) return v;
+  const txt = ((dt.getData('text/uri-list') || '').split(/\r?\n/).find(x => x && x[0] !== '#') || dt.getData('text/plain') || '').trim();
+  let url = txt;
+  if (!/^https?:/i.test(url)) {   // a veces solo llega el HTML de la imagen
+    const mm = (dt.getData('text/html') || '').match(/src="([^"]+)"/i);
+    url = mm ? mm[1].replace(/&amp;/g, '&') : '';
+  }
+  if (url && /^https?:/i.test(url)) {
+    const norm = u => String(u || '').trim().replace(/&amp;/g, '&');
+    const lista = S.data.materiales || [];
+    const m = lista.find(x => x.imagen && norm(x.imagen) === norm(url))
+      || lista.find(x => { const id = (String(x.imagen || '').match(/[-\w]{25,}/) || [])[0]; return id && url.indexOf(id) >= 0; });
+    return m ? m.id : '';
+  }
+  return txt;
+}
+function zonaSoltar(el, fn, marco) {
+  if (!el) return;
+  marco = marco || el;
+  el.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; marco.classList.add('soltar'); });
+  el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) marco.classList.remove('soltar'); });
+  el.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation(); marco.classList.remove('soltar');
+    const c = codigoSoltado(e.dataTransfer);
+    if (c) fn(c);
+    else { beep(false); toast('No reconocí ese material. Arrastra la tarjeta desde el 🗂️ Catálogo o escanea su código.', 'err', 5000); }
+  });
 }
 function ctVer(id) {
   const m = S.cat[idn(id)];
@@ -1617,6 +1732,7 @@ $('#aut-pin').addEventListener('keydown', e => { if (e.key === 'Enter') { e.prev
 $('#m-info').addEventListener('click', e => { if (e.target.id === 'm-info') cerrar('#m-info'); });
 lector($('#pd-usr'), pdUsuario);
 lector($('#pd-art'), pdArticulo);
+zonaSoltar($('#pg-pedir'), pdArticulo, $('#pd-c2'));   // toda la página de Pedir recibe lo que se arrastra
 lector($('#dv-usr'), dvBuscar);
 lector($('#dv-art'), dvArticulo);
 lector($('#cs-q'), csBuscar);
