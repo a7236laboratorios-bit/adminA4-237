@@ -62,6 +62,9 @@ label.lb{display:block;font-size:13px;color:var(--mut);margin:12px 0 6px;font-we
 .btn.sm{padding:5px 10px;font-size:13px;border-radius:8px}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .btn.ico{padding:10px 14px}
+.btn.enter{min-width:96px;font-size:16px;font-weight:700;background:var(--brand);border-color:var(--brand);color:#fff}
+body.m-pedir .btn.enter{background:var(--pedir);border-color:var(--pedir)}
+body.m-devolver .btn.enter{background:var(--devolver);border-color:var(--devolver)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .sp{flex:1}
 .muted{color:var(--mut)}
@@ -279,7 +282,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
         <h2>Escanea tu credencial</h2>
         <div class="scan">
           <input id="pd-usr" class="big" placeholder="📤 PEDIR · Tu matrícula (con L mayúscula)" autocomplete="off" spellcheck="false">
-          <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(pdUsuario)">📷</button>
+          <button class="btn ico enter" type="button" title="Enviar (igual que la tecla Enter)" onclick="enterDigital(this)">↵ Enter</button>
         </div>
         <div id="pd-uinfo"></div>
       </div>
@@ -287,7 +290,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
         <h2>Escanea cada equipo</h2>
         <div class="scan">
           <input id="pd-art" class="big" placeholder="📤 PEDIR · Escanea el equipo que te llevas" autocomplete="off" spellcheck="false">
-          <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(pdArticulo)">📷</button>
+          <button class="btn ico enter" type="button" title="Enviar (igual que la tecla Enter)" onclick="enterDigital(this)">↵ Enter</button>
         </div>
         <div class="hint">Si te llevas varias piezas iguales, escanéalo varias veces o cambia la cantidad.<br>También puedes <b>arrastrar aquí la foto</b> de un material desde el 🗂️ Catálogo (abierto en otra ventana o pestaña).</div>
         <div class="tw" style="margin-top:12px"><table class="t" id="pd-tabla"></table></div>
@@ -315,7 +318,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
         <h2>Escanea tu credencial o un equipo</h2>
         <div class="scan">
           <input id="dv-usr" class="big" placeholder="📥 DEVOLVER · Credencial o equipo" autocomplete="off" spellcheck="false">
-          <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(dvBuscar)">📷</button>
+          <button class="btn ico enter" type="button" title="Enviar (igual que la tecla Enter)" onclick="enterDigital(this)">↵ Enter</button>
         </div>
         <div id="dv-uinfo"></div>
       </div>
@@ -323,7 +326,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
         <div class="row"><h2 style="margin:0">Escanea cada equipo que regresas</h2><span class="sp"></span><button class="btn sm" onclick="dvTodo()">Devuelvo todo</button></div>
         <div class="scan" style="margin-top:12px">
           <input id="dv-art" class="big" placeholder="📥 DEVOLVER · Escanea el equipo que regresas" autocomplete="off" spellcheck="false">
-          <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(dvArticulo)">📷</button>
+          <button class="btn ico enter" type="button" title="Enviar (igual que la tecla Enter)" onclick="enterDigital(this)">↵ Enter</button>
         </div>
         <div class="tw" style="margin-top:12px"><table class="t" id="dv-tabla"></table></div>
         <label class="lb" for="dv-notas">Comentario (opcional)</label>
@@ -397,7 +400,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
           <h2>📦 Por entregar <span class="cnt" id="mo-n1">0</span></h2>
           <div class="scan">
             <input id="mo-scan" placeholder="Escanea lo que le entregas (opcional) para palomearlo" autocomplete="off" spellcheck="false">
-            <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(moEscaneo)">📷</button>
+            <button class="btn ico enter" type="button" title="Enviar (igual que la tecla Enter)" onclick="enterDigital(this)">↵ Enter</button>
           </div>
           <div class="hint">También puedes tocar cada equipo para palomearlo. Al terminar, toca <b>Entregado</b>.</div>
         </div>
@@ -416,7 +419,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
     <div class="card">
       <div class="scan">
         <input id="cs-q" class="big" placeholder="Escanea o escribe un ID, nombre o material" autocomplete="off" spellcheck="false">
-        <button class="btn ico" title="Usar la cámara" onclick="abrirCamara(csBuscar)">📷</button>
+        <button class="btn ico enter" type="button" title="Enviar (igual que la tecla Enter)" onclick="enterDigital(this)">↵ Enter</button>
       </div>
       <div class="chips">
         <button class="btn sm" onclick="csLista(false)">Todos los préstamos activos</button>
@@ -624,6 +627,14 @@ function esCmd(v) { const x = idn(v); return x === CMD.REGISTRAR || x === CMD.CA
 function iniciales(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map(x => x.charAt(0)).join('').toUpperCase() || '?'; }
 function enfocar(sel) { setTimeout(() => { const el = $(sel); if (el && !$('.modal-bg.on')) el.focus(); }, 30); }
 
+/** Botón "↵ Enter" junto a cada cuadro: hace lo mismo que presionar Enter en el teclado. */
+function enterDigital(btn) {
+  const input = btn.parentElement.querySelector('input');
+  if (!input) return;
+  if (!input.value.trim()) { beep(false); toast('Primero escribe o escanea el código.', 'err', 2000); input.focus(); return; }
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  input.focus();
+}
 /** El escáner "teclea" el código y manda Enter (o Tab). */
 function lector(input, fn) {
   input.addEventListener('keydown', e => {
