@@ -195,6 +195,9 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
 .mon-card.nuevo{border-color:#f59e0b;box-shadow:0 0 0 4px #fef3c7;animation:pulso 1.2s ease-in-out 3}
 @keyframes pulso{50%{box-shadow:0 0 0 9px #fde68a}}
 .mon-card.dv{border-color:#86efac}
+.aut-rem{margin-top:12px;padding:10px 12px;border-radius:10px;background:#eff6ff;color:#1e40af;font-size:14px;display:flex;gap:8px;align-items:center}
+.aut-rem.ok{background:var(--okbg);color:var(--ok);font-weight:700;font-size:16px}
+.btn.autrem{background:var(--ok);border-color:var(--ok);color:#fff;font-size:15px;padding:12px 18px}
 .mon-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .mon-head b{font-size:17px}
 .mon-it{display:flex;gap:10px;align-items:center;padding:8px 6px;border-top:1px solid var(--bd);cursor:pointer;border-radius:8px}
@@ -490,6 +493,7 @@ nav button[data-p=devolver].on{background:var(--devolver);box-shadow:0 0 0 2px #
     <label class="lb" for="aut-pin">Laboratorista: escribe tu contraseña</label>
     <input id="aut-pin" class="lockpin" type="password" autocomplete="off" placeholder="••••">
     <div class="alert err" id="aut-err" style="display:none"></div>
+    <div class="aut-rem" id="aut-rem" style="display:none"></div>
     <div class="row" style="margin-top:18px"><button class="btn" onclick="cancelarAut()">Regresar</button><span class="sp"></span><button class="btn okb lg" id="aut-btn" onclick="enviarAut()">Autorizar</button></div>
   </div>
 </div>
@@ -779,23 +783,54 @@ function pasos(pref, n) {
 // ═══════════════ AUTORIZACIÓN DEL LABORATORISTA ═══════════════
 let _aut = null;
 /** Pide la contraseña del laboratorista y ejecuta enviar(pin). Si no se requiere, ejecuta directo. */
-function autorizar(requerida, resumenHtml, enviar) {
+function autorizar(requerida, resumenHtml, enviar, remoto) {
   if (!requerida) return enviar('');
   return new Promise(res => {
-    _aut = { enviar: enviar, res: res };
+    _aut = { enviar: enviar, res: res, remoto: remoto || null };
     $('#aut-res').innerHTML = resumenHtml;
     $('#aut-pin').value = '';
     $('#aut-err').style.display = 'none';
+    const r = $('#aut-rem');
+    r.className = 'aut-rem';
+    r.style.display = remoto ? '' : 'none';
+    r.innerHTML = '<span class="spin"></span> O el laboratorista puede autorizar desde su pantalla de 📣 Solicitudes.';
     abrir('#m-aut');
     setTimeout(() => $('#aut-pin').focus(), 60);
+    if (remoto) autRemotaVigilar(_aut);
   });
 }
+/** Mientras la ventana está abierta, pregunta cada 2 s si ya autorizaron a distancia. */
+async function autRemotaVigilar(a) {
+  while (_aut === a) {
+    await new Promise(r => setTimeout(r, 2000));
+    if (_aut !== a || a.ocupado) continue;
+    let st = null;
+    try { st = await api('kioscoAutorizacion', KQ.id, a.remoto.usuarioId); } catch (e) { continue; }
+    if (_aut !== a || a.ocupado || !st || !st.autorizado) continue;
+    a.ocupado = true;
+    const r = $('#aut-rem');
+    r.className = 'aut-rem ok';
+    r.innerHTML = '✓ ' + esc(st.lab || 'El laboratorista') + ' autorizó a distancia. Registrando…';
+    beep(true);
+    try {
+      const res = await a.remoto.enviar();
+      cerrar('#m-aut');
+      _aut = null; a.res(res);
+    } catch (e) {
+      a.ocupado = false;
+      r.className = 'aut-rem';
+      r.innerHTML = '<span class="spin"></span> O el laboratorista puede autorizar desde su pantalla de 📣 Solicitudes.';
+      const err = $('#aut-err'); err.textContent = limpio(e); err.style.display = ''; beep(false);
+    }
+  }
+}
 async function enviarAut() {
-  if (!_aut) return;
+  if (!_aut || _aut.ocupado) return;
   const pin = $('#aut-pin').value.trim();
   const err = $('#aut-err');
   if (!pin) { err.textContent = 'Falta la contraseña.'; err.style.display = ''; return; }
   const b = $('#aut-btn'); btnCarga(b, true, 'Autorizando…');
+  _aut.ocupado = true;
   try {
     const r = await _aut.enviar(pin);
     btnCarga(b, false);
@@ -803,6 +838,7 @@ async function enviarAut() {
     const a = _aut; _aut = null; a.res(r);
   } catch (e) {
     btnCarga(b, false);
+    if (_aut) _aut.ocupado = false;
     if (/AUTORIZAR:|SESION:/.test(textoError(e))) {
       err.textContent = limpio(e); err.style.display = '';
       $('#aut-pin').value = ''; $('#aut-pin').focus();
@@ -816,7 +852,7 @@ async function enviarAut() {
     }
   }
 }
-function cancelarAut() { cerrar('#m-aut'); const a = _aut; _aut = null; if (a) a.res(null); focoPagina(); }
+function cancelarAut() { if (_aut && _aut.ocupado) return; cerrar('#m-aut'); const a = _aut; _aut = null; if (a) a.res(null); focoPagina(); }
 
 /** Pantalla de "¡Listo!" que se cierra sola para el siguiente usuario. */
 let _okTimer = null;
@@ -1087,7 +1123,9 @@ async function dvTerminar() {
     (quedan ? '<div class="muted" style="margin-top:6px">Se queda con ' + quedan + ' pieza(s) pendiente(s).</div>' : '') +
     '<div class="muted" style="margin-top:6px">Revisa físicamente que el material esté completo antes de autorizar.</div></div>';
   try {
-    const r = await autorizar(S.data.config.autorizarDevolucion, resumen, pin => api('registrarDevolucion', { pin: pin }, { usuarioId: u.id, items: items, notas: notas }));
+    const datos = { usuarioId: u.id, items: items, notas: notas };
+    const r = await autorizar(S.data.config.autorizarDevolucion, resumen, pin => api('registrarDevolucion', { pin: pin }, datos),
+      { usuarioId: u.id, enviar: () => api('registrarDevolucion', { remoto: KQ.id }, datos) });
     if (!r) { pasos('dv', 2); kqAvisar('devolver'); return; }
     setCatalogo(r.materiales); S.data.resumen = r.resumen;
     beep(true);
@@ -1288,8 +1326,22 @@ function moPintar() {
       (e.items.length ? '<div style="margin-top:8px">' + e.items.map(i => '<div class="mon-it" style="cursor:default">' + moFoto(i) +
         '<div style="flex:1;min-width:0"><div class="nm">' + esc(i.nombre) + '</div><div class="muted" style="font-size:12.5px"><span class="mono">' + esc(i.id) + '</span>' + (i.ubicacion ? ' · 📍 ' + esc(i.ubicacion) : '') + '</div></div>' +
         '<div class="q">×' + i.cantidad + '</div></div>').join('') + '</div>' : '<div class="muted" style="margin-top:8px;font-size:14px">Aún no escanea nada.</div>') +
+      (dv && e.etapa === 'esperando' ? '<div class="row" style="margin-top:10px"><span class="muted" style="font-size:13px">También puedes ir al kiosco y escribir tu contraseña.</span><span class="sp"></span>' +
+        '<button class="btn autrem" onclick="moAutorizar(' + js(e.kid) + ',' + js(e.usuario.id) + ',' + js(e.usuario.nombre || e.usuario.id) + ',this)">✓ Autorizar devolución</button></div>' : '') +
       '</div>';
   }).join('') : '<div class="card empty">Nadie está usando el kiosco.</div>';
+}
+async function moAutorizar(kid, uid, nombre, b) {
+  if (!confirm('¿Autorizar la devolución de ' + nombre + '?\n\nQuedará registrada a tu nombre. Revisa que el material esté completo.')) return;
+  btnCarga(b, true, 'Autorizando…');
+  try {
+    const r = await apiS('autorizarRemoto', kid, uid);
+    toast('✓ Autorizado. El kiosco registrará la devolución en unos segundos (a nombre de ' + r.lab + ').', 'ok', 5000);
+    b.textContent = '✓ Autorizado'; b.disabled = true;
+  } catch (e) {
+    btnCarga(b, false);
+    toast(/no permitida/i.test(textoError(e)) ? 'Falta actualizar el Apps Script del inventario para autorizar a distancia.' : limpio(e), 'err', 7000);
+  }
 }
 function moMarcar(folio, id, sumar) {
   const e = MO.data && MO.data.porEntregar.find(x => x.folio === folio); if (!e) return;

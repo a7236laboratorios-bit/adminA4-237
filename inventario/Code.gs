@@ -113,11 +113,11 @@ function doGet(e) {
 const API_FUNCIONES = {
   // autoservicio
   getAppData, identificarUsuario, registrarUsuario, identificarParaDevolucion,
-  registrarPrestamo, registrarDevolucion, getLockers, kioscoEstado,
+  registrarPrestamo, registrarDevolucion, getLockers, kioscoEstado, kioscoAutorizacion,
   // laboratorista
   validarLaboratorista, getResumen, buscarUsuario, prestamosDeUsuario, buscarParaDevolucion,
   consultar, listarActivos, listarUsuarios, getUsuariosAdmin, guardarUsuario,
-  getMonitor, marcarEntregado
+  getMonitor, marcarEntregado, autorizarRemoto
 };
 
 function doPost(e) {
@@ -463,7 +463,9 @@ function registrarDevolucion(auth, p) {
     const md = modelo_(cfg);
     const uid = id_(p.usuarioId);
     if (!uid) throw new Error('Falta el usuario que devuelve.');
-    const lab = autorizador_(auth, cfg, si_(cfg.AUTORIZAR_DEVOLUCION), 'u_' + uid);
+    const lab = (auth && auth.remoto)
+      ? autorizacionRemota_(auth.remoto, uid)   // el laboratorista ya autorizó desde Solicitudes
+      : autorizador_(auth, cfg, si_(cfg.AUTORIZAR_DEVOLUCION), 'u_' + uid);
 
     const agg = {}, orden = [];
     (p.items || []).forEach(it => {
@@ -639,6 +641,50 @@ function kioscoEstado(kid, estado) {
     }
   }
   return { ok: true };
+}
+
+// ── Autorizar una devolución A DISTANCIA (desde la pantalla Solicitudes) ──
+//  1. El laboratorista (con sesión) toca "Autorizar" → autorizarRemoto guarda un
+//     permiso de un solo uso para ESE kiosco y ESE usuario (dura 2 minutos).
+//  2. El kiosco, mientras espera la contraseña, pregunta kioscoAutorizacion.
+//  3. Al ver el permiso, registra la devolución con auth = { remoto: kid };
+//     registrarDevolucion lo valida y lo borra (no se puede reutilizar).
+const AUTREM_TTL = 120;
+function kidValido_(kid) {
+  kid = String(kid || '').trim();
+  if (!/^[\w-]{1,40}$/.test(kid)) throw new Error('Kiosco inválido.');
+  return kid;
+}
+function autorizarRemoto(auth, kid, usuarioId) {
+  const cfg = getConfig_();
+  const lab = verificarLab_(auth, cfg);
+  kid = kidValido_(kid);
+  const uid = id_(usuarioId);
+  const cache = CacheService.getScriptCache();
+  let e = null;
+  try { e = JSON.parse(cache.get('KQ_' + kid) || 'null'); } catch (err) { e = null; }
+  if (!e || e.modo !== 'devolver' || e.etapa !== 'esperando' || id_(e.usuario && e.usuario.id) !== uid)
+    throw new Error('Esa devolución ya no está esperando autorización (quizá ya se autorizó o el alumno la canceló).');
+  cache.put('AR_' + kid, JSON.stringify({ uid: uid, lab: lab.nombre, t: Date.now() }), AUTREM_TTL);
+  return { ok: true, lab: lab.nombre };
+}
+/** Público (kiosco): ¿ya autorizó el laboratorista a distancia? */
+function kioscoAutorizacion(kid, usuarioId) {
+  kid = kidValido_(kid);
+  let v = null;
+  try { v = JSON.parse(CacheService.getScriptCache().get('AR_' + kid) || 'null'); } catch (err) { v = null; }
+  if (!v || v.uid !== id_(usuarioId)) return { autorizado: false };
+  return { autorizado: true, lab: v.lab };
+}
+/** Se llama dentro del candado de registrarDevolucion: valida y consume el permiso. */
+function autorizacionRemota_(kid, uid) {
+  kid = kidValido_(kid);
+  const cache = CacheService.getScriptCache(), key = 'AR_' + kid;
+  let v = null;
+  try { v = JSON.parse(cache.get(key) || 'null'); } catch (err) { v = null; }
+  if (!v || v.uid !== uid) throw new Error('AUTORIZAR: La autorización a distancia ya venció. Pide que la vuelvan a dar o escribe la contraseña.');
+  cache.remove(key);
+  return { nombre: v.lab };
 }
 
 function entregas_() {
