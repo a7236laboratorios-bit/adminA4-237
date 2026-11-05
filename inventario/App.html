@@ -1115,7 +1115,7 @@ function moNovedades() {
 }
 function moAviso(txt) {
   toast(txt, 'ok', 6000);
-  if (MO.sonido) { beep(true); setTimeout(() => beep(true), 180); setTimeout(() => beep(true), 360); }
+  if (MO.sonido) alarmaSonar();
   try { if (MO.sonido && window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('Almacén A7-237', { body: txt }); } catch (e) {}
   const t0 = document.title; let n = 0;
   const iv = setInterval(() => { document.title = n++ % 2 ? t0 : '🔔 ' + txt.split('\n')[0]; if (n > 9) { clearInterval(iv); document.title = t0; } }, 900);
@@ -1124,8 +1124,76 @@ function moSonido() {
   MO.sonido = !MO.sonido;
   $('#mo-son').textContent = MO.sonido ? '🔔 Aviso activado' : '🔔 Activar aviso';
   $('#mo-son').classList.toggle('pri', MO.sonido);
-  if (MO.sonido) { beep(true); try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {} }
+  if (MO.sonido) {
+    alarmaDesbloquear();   // se toca dentro del clic para que el celular permita el audio después
+    pantallaEncendida(true);
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  } else { alarmaParar(); pantallaEncendida(false); }
 }
+
+// ── Alarma fuerte para avisar al laboratorista ──
+// Se genera un WAV en memoria y se reproduce con <audio> (no con Web Audio):
+// así suena a todo volumen y en iPhone suena aunque el switch de silencio esté puesto.
+const ALARMA = { audio:null, rep:null, fin:0 };
+function alarmaWav() {
+  const sr = 22050, notas = [[880,.16],[0,.04],[1175,.16],[0,.04],[1568,.28],[0,.12],[880,.16],[0,.04],[1175,.16],[0,.04],[1568,.28],[0,.3]];
+  const total = Math.round(notas.reduce((a, n) => a + n[1], 0) * sr);
+  const buf = new ArrayBuffer(44 + total * 2), v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + total * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, total * 2, true);
+  let k = 0;
+  notas.forEach(([f, d]) => {
+    const n = Math.round(d * sr);
+    for (let i = 0; i < n; i++, k++) {
+      let x = 0;
+      if (f) {
+        const t = i / sr, env = Math.min(1, i / 200, (n - i) / 400);
+        // onda casi cuadrada (fundamental + armónicos impares) = sonido penetrante, se oye en bocinas de celular
+        x = (Math.sin(2*Math.PI*f*t) + Math.sin(6*Math.PI*f*t) / 3 + Math.sin(10*Math.PI*f*t) / 5) * 0.85 * env;
+      }
+      v.setInt16(44 + k * 2, Math.max(-1, Math.min(1, x)) * 32767, true);
+    }
+  });
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function alarmaAudio() {
+  if (!ALARMA.audio) { ALARMA.audio = new Audio(alarmaWav()); ALARMA.audio.volume = 1; ALARMA.audio.preload = 'auto'; }
+  return ALARMA.audio;
+}
+function alarmaDesbloquear() {
+  const a = alarmaAudio();
+  try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function alarmaSonar() {
+  // Suena cada 2.5 s hasta que el laboratorista toque la pantalla o presione una tecla (máx. 30 s)
+  ALARMA.fin = Date.now() + 30000;
+  const una = () => {
+    if (Date.now() > ALARMA.fin) return alarmaParar();
+    try { const a = alarmaAudio(); a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => beep(true)); } catch (e) { beep(true); }
+    try { if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 600]); } catch (e) {}
+  };
+  if (!ALARMA.rep) {
+    ALARMA.rep = setInterval(una, 2500);
+    setTimeout(() => { ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, alarmaParar, { once: true })); }, 600);
+  }
+  una();
+}
+function alarmaParar() {
+  clearInterval(ALARMA.rep); ALARMA.rep = null;
+  ['pointerdown', 'keydown'].forEach(ev => document.removeEventListener(ev, alarmaParar));
+}
+// Mantiene la pantalla del celular encendida mientras el aviso esté activado (si se apaga, el navegador deja de revisar)
+let WL = null;
+async function pantallaEncendida(on) {
+  try {
+    if (on && navigator.wakeLock && !WL) { WL = await navigator.wakeLock.request('screen'); WL.addEventListener('release', () => { WL = null; }); }
+    if (!on && WL) { await WL.release(); WL = null; }
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && MO.sonido) pantallaEncendida(true); });
 function moHace(t) {
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
   return s < 60 ? 'hace ' + s + ' s' : s < 3600 ? 'hace ' + Math.round(s / 60) + ' min' : 'hace ' + Math.round(s / 3600) + ' h';
