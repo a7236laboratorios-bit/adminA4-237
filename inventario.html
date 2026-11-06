@@ -1193,19 +1193,30 @@ async function moCargar(manual) {
 }
 function moNovedades() {
   const d = MO.data, nuevos = [];
+  let timbre = false;   // el timbre solo suena cuando alguien está pidiendo o pide autorización para devolver
   d.porEntregar.forEach(e => { const k = 'E' + e.folio; if (!MO.visto[k]) { MO.visto[k] = Date.now(); if (!MO.primera) nuevos.push('📦 ' + e.usuario + ' registró un préstamo'); } });
   d.enCurso.forEach(e => {
-    const k = 'C' + e.kid + e.usuario.id + e.etapa;
-    if (!MO.visto[k]) { MO.visto[k] = Date.now(); if (!MO.primera && (e.etapa === 'esperando' || e.etapa === 'identificado')) nuevos.push(e.etapa === 'esperando' ? '📥 ' + e.usuario.nombre + ' espera que revises su devolución' : '⏳ ' + e.usuario.nombre + ' está en el kiosco'); }
+    const dv = e.modo === 'devolver';
+    // pedir: avisa una vez por persona en el kiosco (aunque ya esté escaneando); devolver: solo cuando pide autorización
+    const k = dv ? 'D' + e.kid + e.usuario.id + e.etapa : 'P' + e.kid + e.usuario.id;
+    if (MO.visto[k]) return;
+    MO.visto[k] = Date.now();
+    if (MO.primera) return;
+    if (dv && e.etapa === 'esperando') { nuevos.push('📥 ' + e.usuario.nombre + ' pide autorización para devolver'); timbre = true; }
+    else if (!dv) { nuevos.push('🛒 ' + e.usuario.nombre + ' está pidiendo material'); timbre = true; }
   });
+  // olvida a quien ya salió del kiosco, para que vuelva a sonar si regresa después
+  const activos = {};
+  d.enCurso.forEach(e => { activos[(e.modo === 'devolver' ? 'D' + e.kid + e.usuario.id + e.etapa : 'P' + e.kid + e.usuario.id)] = 1; });
+  Object.keys(MO.visto).forEach(k => { if ((k[0] === 'P' || k[0] === 'D') && !activos[k]) delete MO.visto[k]; });
   MO.primera = false;
   if (!nuevos.length) return;
-  moAviso(nuevos.join('\n'));
+  moAviso(nuevos.join('\n'), timbre);
 }
-function moAviso(txt) {
+function moAviso(txt, timbre) {
   toast(txt, 'ok', 6000);
-  if (MO.sonido) alarmaSonar();
-  try { if (MO.sonido && window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('Almacén A7-237', { body: txt }); } catch (e) {}
+  if (MO.sonido && timbre) alarmaSonar();
+  try { if (MO.sonido && timbre && window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('Almacén A7-237', { body: txt }); } catch (e) {}
   const t0 = document.title; let n = 0;
   const iv = setInterval(() => { document.title = n++ % 2 ? t0 : '🔔 ' + txt.split('\n')[0]; if (n > 9) { clearInterval(iv); document.title = t0; } }, 900);
 }
@@ -1220,59 +1231,47 @@ function moSonido() {
   } else { alarmaParar(); pantallaEncendida(false); }
 }
 
-// ── Alarma fuerte para avisar al laboratorista ──
+// ── Timbre suave para avisar al laboratorista ──
 // Se genera un WAV en memoria y se reproduce con <audio> (no con Web Audio):
-// así suena a todo volumen y en iPhone suena aunque el switch de silencio esté puesto.
-const ALARMA = { audio:null, rep:null, fin:0 };
+// así se oye en el celular y en iPhone suena aunque el switch de silencio esté puesto.
+const ALARMA = { audio:null };
 function alarmaWav() {
-  const sr = 22050, notas = [[880,.16],[0,.04],[1175,.16],[0,.04],[1568,.28],[0,.12],[880,.16],[0,.04],[1175,.16],[0,.04],[1568,.28],[0,.3]];
-  const total = Math.round(notas.reduce((a, n) => a + n[1], 0) * sr);
+  // "ding-dong" de dos notas (Mi5 → Do5) con timbre de campanita: seno + armónico suave y caída natural
+  const sr = 22050, notas = [[659.25, 0, 1.1], [523.25, 0.42, 1.4]];   // [frecuencia, inicio s, duración s]
+  const total = Math.round(1.9 * sr);
   const buf = new ArrayBuffer(44 + total * 2), v = new DataView(buf);
   const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
   str(0, 'RIFF'); v.setUint32(4, 36 + total * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
   str(36, 'data'); v.setUint32(40, total * 2, true);
-  let k = 0;
-  notas.forEach(([f, d]) => {
-    const n = Math.round(d * sr);
-    for (let i = 0; i < n; i++, k++) {
-      let x = 0;
-      if (f) {
-        const t = i / sr, env = Math.min(1, i / 200, (n - i) / 400);
-        // onda casi cuadrada (fundamental + armónicos impares) = sonido penetrante, se oye en bocinas de celular
-        x = (Math.sin(2*Math.PI*f*t) + Math.sin(6*Math.PI*f*t) / 3 + Math.sin(10*Math.PI*f*t) / 5) * 0.85 * env;
-      }
-      v.setInt16(44 + k * 2, Math.max(-1, Math.min(1, x)) * 32767, true);
+  const mezcla = new Float32Array(total);
+  notas.forEach(([f, ini, dur]) => {
+    const i0 = Math.round(ini * sr), n = Math.min(total - i0, Math.round(dur * sr));
+    for (let i = 0; i < n; i++) {
+      const t = i / sr, ataque = Math.min(1, i / (0.008 * sr)), caida = Math.exp(-3.2 * t) * Math.min(1, (n - i) / (0.05 * sr));
+      mezcla[i0 + i] += (Math.sin(2*Math.PI*f*t) + 0.25 * Math.sin(4*Math.PI*f*t) * Math.exp(-6 * t)) * ataque * caida * 0.5;
     }
   });
+  for (let k = 0; k < total; k++) v.setInt16(44 + k * 2, Math.max(-1, Math.min(1, mezcla[k])) * 32767, true);
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
 function alarmaAudio() {
-  if (!ALARMA.audio) { ALARMA.audio = new Audio(alarmaWav()); ALARMA.audio.volume = 1; ALARMA.audio.preload = 'auto'; }
+  if (!ALARMA.audio) { ALARMA.audio = new Audio(alarmaWav()); ALARMA.audio.volume = 0.8; ALARMA.audio.preload = 'auto'; }
   return ALARMA.audio;
 }
 function alarmaDesbloquear() {
+  // se reproduce en silencio dentro del clic solo para que el celular permita el audio después
   const a = alarmaAudio();
-  try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  try { a.muted = true; a.currentTime = 0; const p = a.play(); const fin = () => { a.pause(); a.muted = false; }; if (p && p.then) p.then(fin, fin); else fin(); } catch (e) {}
 }
 function alarmaSonar() {
-  // Suena cada 2.5 s hasta que el laboratorista toque la pantalla o presione una tecla (máx. 30 s)
-  ALARMA.fin = Date.now() + 30000;
-  const una = () => {
-    if (Date.now() > ALARMA.fin) return alarmaParar();
-    try { const a = alarmaAudio(); a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => beep(true)); } catch (e) { beep(true); }
-    try { if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 600]); } catch (e) {}
-  };
-  if (!ALARMA.rep) {
-    ALARMA.rep = setInterval(una, 2500);
-    setTimeout(() => { ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, alarmaParar, { once: true })); }, 600);
-  }
-  una();
+  // Un solo "ding-dong" por aviso (no se repite)
+  try { const a = alarmaAudio(); a.muted = false; a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => beep(true)); } catch (e) { beep(true); }
+  try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
 }
 function alarmaParar() {
-  clearInterval(ALARMA.rep); ALARMA.rep = null;
-  ['pointerdown', 'keydown'].forEach(ev => document.removeEventListener(ev, alarmaParar));
+  try { if (ALARMA.audio) ALARMA.audio.pause(); } catch (e) {}
 }
 // Mantiene la pantalla del celular encendida mientras el aviso esté activado (si se apaga, el navegador deja de revisar)
 let WL = null;
